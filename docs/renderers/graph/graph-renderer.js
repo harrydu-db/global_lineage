@@ -57,6 +57,9 @@
  * @property {() => void} fit
  *           Reset zoom/pan to fit the whole graph.
  *
+ * @property {(() => void) | undefined} [refreshTheme]
+ *           If implemented, re-apply theme-driven styles after `data-theme` on the document root changes.
+ *
  * @property {() => void} destroy
  *           Tear down. After calling, the instance must not be reused.
  */

@@ -8,6 +8,7 @@
 import { api } from './api/client.js';
 import { lineagePage } from './pages/lineage.js';
 import { statisticsPage } from './pages/statistics.js';
+import { GLOBAL_LINEAGE_THEME_EVENT, THEME_STORAGE_KEY, getTheme } from './lib/theme.js';
 
 const pages = [lineagePage, statisticsPage];
 
@@ -61,10 +62,45 @@ function escapeHtml(s) {
 
 window.addEventListener('hashchange', route);
 window.addEventListener('DOMContentLoaded', () => {
+  setupThemeToggle();
   setupLineageDataControls();
   if (!window.location.hash) window.location.hash = `#/${pages[0].id}`;
   route();
 });
+
+function setupThemeToggle() {
+  const btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+
+  const sunSvg =
+    '<svg class="theme-toggle-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"/></svg>';
+  const moonSvg =
+    '<svg class="theme-toggle-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+  function syncThemeToggleUi() {
+    const icon = btn.querySelector('.theme-toggle-icon');
+    const isLight = getTheme() === 'light';
+    if (icon) icon.innerHTML = isLight ? moonSvg : sunSvg;
+    btn.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
+    btn.setAttribute('title', isLight ? 'Dark mode' : 'Light mode');
+  }
+
+  syncThemeToggleUi();
+
+  btn.addEventListener('click', () => {
+    const next = getTheme() === 'light' ? 'dark' : 'light';
+    if (next === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch (_) { /* ignore */ }
+    syncThemeToggleUi();
+    window.dispatchEvent(new CustomEvent(GLOBAL_LINEAGE_THEME_EVENT));
+  });
+}
 
 function setupLineageDataControls() {
   const fileInput = document.getElementById('lineage-file-input');

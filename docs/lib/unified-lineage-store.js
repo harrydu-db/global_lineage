@@ -237,6 +237,61 @@ function buildStore(rows, catalogExploreBaseUrl) {
       .slice(0, n);
   }
 
+  function parseNameParts(fullName) {
+    const segments = String(fullName || '').split('.');
+    const catalog = segments[0] || '—';
+    const schema = segments.length >= 3 ? segments[1] : '—';
+    return { catalog, schema };
+  }
+
+  /**
+   * Rows for the statistics table. Filters are combined with AND when multiple are set.
+   * @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null }} filter
+   * @returns {{ object_full_name: string, object_type: string|null, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[] }[]}
+   */
+  function listObjectsForStats(filter = {}) {
+    const typeEq = filter.object_type != null && filter.object_type !== '' ? String(filter.object_type) : null;
+    const catEq = filter.catalog != null && filter.catalog !== '' ? String(filter.catalog) : null;
+    const schemaEq = filter.schema != null && filter.schema !== '' ? String(filter.schema) : null;
+    const nameEq = filter.object_full_name != null && filter.object_full_name !== ''
+      ? String(filter.object_full_name)
+      : null;
+
+    let names = sortedNames;
+    if (nameEq) {
+      names = names.filter((n) => n === nameEq);
+    } else {
+      if (typeEq) {
+        names = names.filter((n) => (objectTypes.get(n) ?? 'Unknown') === typeEq);
+      }
+      if (catEq) {
+        names = names.filter((n) => (n.split('.')[0] || '—') === catEq);
+      }
+      if (schemaEq) {
+        names = names.filter((n) => {
+          const { schema } = parseNameParts(n);
+          return schema === schemaEq;
+        });
+      }
+    }
+
+    return names.map((object_full_name) => {
+      const { catalog, schema } = parseNameParts(object_full_name);
+      const upstream_objects = [...(upstream.get(object_full_name) || [])].sort();
+      const downstream_objects = [...(downstream.get(object_full_name) || [])].sort();
+      return {
+        object_full_name,
+        object_type: objectTypes.get(object_full_name) ?? null,
+        catalog,
+        schema,
+        downstream_count: downstreamCountMap.get(object_full_name) || 0,
+        downstream_objects,
+        upstream_count: upstream_objects.length,
+        upstream_objects,
+      };
+    });
+  }
+
   function searchObjects(q, limit) {
     const qq = String(q || '').trim().toLowerCase();
     let list = sortedNames;
@@ -267,6 +322,7 @@ function buildStore(rows, catalogExploreBaseUrl) {
     statsByObjectType,
     statsByPipeline,
     statsTopDownstream,
+    listObjectsForStats,
     objectDetail,
     exploreUrlFor,
     catalogExploreBaseUrl,

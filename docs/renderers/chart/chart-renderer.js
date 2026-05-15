@@ -19,9 +19,9 @@
  *           Mount into the container. Container should be the
  *           direct parent that should hold the canvas.
  *
- * @property {(kind: ChartKind, data: CategoricalDatum[], opts?: object) => void} render
+ * @property {(kind: ChartKind, data: CategoricalDatum[], opts?: { onSegmentClick?: (d: CategoricalDatum & { index: number }) => void }) => void} render
  *           Draw a chart of the given kind from categorical data.
- *           `opts` is impl-specific (e.g. {title, valueKey}).
+ *           `opts` is impl-specific (e.g. {title, valueKey, onSegmentClick}).
  *
  * @property {() => void} destroy
  */

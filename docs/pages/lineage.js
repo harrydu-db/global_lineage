@@ -11,6 +11,7 @@
 
 import { api } from '../api/client.js';
 import { getUnifiedLineageStore } from '../lib/unified-lineage-store.js';
+import { GLOBAL_LINEAGE_THEME_EVENT } from '../lib/theme.js';
 import { createCytoscapeRenderer as createGraphRenderer } from '../renderers/graph/cytoscape-renderer.js';
 import { SUPPORTED_LAYOUTS } from '../renderers/graph/graph-renderer.js';
 
@@ -100,6 +101,11 @@ export const lineagePage = {
 
     const renderer = createGraphRenderer();
     renderer.init(graphHost);
+
+    const onGraphTheme = () => {
+      if (typeof renderer.refreshTheme === 'function') renderer.refreshTheme();
+    };
+    window.addEventListener(GLOBAL_LINEAGE_THEME_EVENT, onGraphTheme);
 
     renderer.onNodeClick((node) => {
       if (!node) {
@@ -240,10 +246,61 @@ export const lineagePage = {
     // `change` fires on blur or after a datalist selection.
     rootInputEl.addEventListener('change', () => {
       const v = rootInputEl.value.trim();
+      if (v === ALL_SENTINEL) {
+        refreshCatalogList();
+      } else if (v && knownOptions.has(v)) {
+        syncTierSelectorsFromRoot(v);
+      }
       if (v && v !== lastLoadedRoot) load();
     });
 
-    primeDatalist();
+    function lineageRootFromHash() {
+      const hash = window.location.hash || '';
+      const q = hash.indexOf('?');
+      if (q < 0) return null;
+      const params = new URLSearchParams(hash.slice(q + 1));
+      const raw = (params.get('obj') || params.get('root') || params.get('object') || '').trim();
+      return raw || null;
+    }
+
+    function stripLineageQueryFromHash() {
+      if (!window.location.hash.includes('?')) return;
+      const path = `${window.location.pathname}${window.location.search}#/lineage`;
+      try {
+        history.replaceState(null, '', path);
+      } catch (_) { /* ignore */ }
+    }
+
+    function syncTierSelectorsFromRoot(fullName) {
+      const parts = String(fullName).split('.');
+      if (parts.length < 3) return;
+      const cat = parts[0];
+      const sch = parts[1];
+      const tbl = parts.slice(2).join('.');
+      if (!hierarchy[cat]) return;
+      tierCatalogEl.value = cat;
+      tierCatalogEl.dispatchEvent(new Event('change', { bubbles: true }));
+      if (!hierarchy[cat][sch]) return;
+      tierSchemaEl.value = sch;
+      tierSchemaEl.dispatchEvent(new Event('change', { bubbles: true }));
+      if ((hierarchy[cat][sch] || []).includes(tbl)) tierTableEl.value = tbl;
+    }
+
+    (async () => {
+      await primeDatalist();
+      const fromHash = lineageRootFromHash();
+      if (!fromHash) return;
+      if (knownOptions.has(fromHash)) {
+        rootInputEl.value = fromHash;
+        lastLoadedRoot = null;
+        await load();
+        stripLineageQueryFromHash();
+      } else {
+        statusEl.textContent = `Unknown object (not in graph): ${fromHash}`;
+        statusEl.classList.add('error');
+        stripLineageQueryFromHash();
+      }
+    })();
 
     async function load() {
       const rootName = rootInputEl.value.trim();
@@ -251,6 +308,11 @@ export const lineagePage = {
         statusEl.textContent = 'Enter a root object first.';
         statusEl.classList.add('error');
         return;
+      }
+      if (rootName === ALL_SENTINEL) {
+        refreshCatalogList();
+      } else if (knownOptions.has(rootName)) {
+        syncTierSelectorsFromRoot(rootName);
       }
       // Claim this root immediately so overlapping auto-load triggers
       // (input → refreshDatalist + change) coalesce into one request.
@@ -298,12 +360,13 @@ export const lineagePage = {
           sideEl.innerHTML = `<div class="empty-state">Whole graph loaded. Click a node for details.</div>`;
         } else {
           renderer.highlight(rootName);
+          const rootNode = nodes.find((n) => n.id === rootName);
           sideEl.innerHTML = renderNodeDetails(
             {
               id: rootName,
               label: rootName,
-              type: null,
-              data: {},
+              type: rootNode?.type ?? null,
+              data: rootNode?.data ?? {},
             },
             exploreUrlFor,
           );
@@ -335,6 +398,7 @@ export const lineagePage = {
 
     return () => {
       if (popoverHideTimer) clearTimeout(popoverHideTimer);
+      window.removeEventListener(GLOBAL_LINEAGE_THEME_EVENT, onGraphTheme);
       renderer.destroy();
     };
   },

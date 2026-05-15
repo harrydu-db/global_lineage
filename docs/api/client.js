@@ -66,5 +66,10 @@ export const api = {
       const store = await getUnifiedLineageStore();
       return store.statsTopDownstream(n);
     },
+    /** @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null }} [filter] */
+    listObjects: async (filter = {}) => {
+      const store = await getUnifiedLineageStore();
+      return store.listObjectsForStats(filter);
+    },
   },
 };

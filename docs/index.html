@@ -2,6 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <script>
+      (function () {
+        try {
+          if (localStorage.getItem('global-lineage-theme') === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
+    <!-- GitHub Pages /repo (no trailing slash): relative ./app.js would otherwise resolve to domain root. -->
+    <script>
+      (function () {
+        var p = location.pathname;
+        if (p === '/' || p.endsWith('/')) return;
+        var seg = p.slice(p.lastIndexOf('/') + 1);
+        if (seg.indexOf('.') !== -1) return;
+        location.replace(p + '/' + location.search + location.hash);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Global Lineage</title>
     <link rel="stylesheet" href="./styles.css" />
@@ -17,6 +36,28 @@
       <h1 class="app-title">Global Lineage</h1>
       <nav id="app-nav" class="app-nav" aria-label="Primary"></nav>
       <div class="header-lineage-tools">
+        <button
+          type="button"
+          id="theme-toggle"
+          class="theme-toggle"
+          aria-label="Switch to light mode"
+          title="Light mode"
+        >
+          <span class="theme-toggle-icon" aria-hidden="true"></span>
+        </button>
+        <script>
+          (function () {
+            var sun =
+              '<svg class="theme-toggle-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"/></svg>';
+            var moon =
+              '<svg class="theme-toggle-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+            var ic = document.querySelector('#theme-toggle .theme-toggle-icon');
+            if (ic) {
+              ic.innerHTML =
+                document.documentElement.getAttribute('data-theme') === 'light' ? moon : sun;
+            }
+          })();
+        </script>
         <label class="upload-json-label">
           <input type="file" id="lineage-file-input" accept=".json,application/json" hidden />
           <span class="btn-header secondary">Upload JSON</span>

@@ -22,12 +22,18 @@ const TYPE_PALETTE = [
 ];
 
 function colorForType(type, lookup) {
-  if (!type) return '#e6edf3';
+  if (!type) {
+    return getComputedStyle(document.documentElement).getPropertyValue('--graph-cy-unknown-type').trim() || '#e6edf3';
+  }
   if (type in TYPE_COLORS) return TYPE_COLORS[type];
   if (!(type in lookup)) {
     lookup[type] = TYPE_PALETTE[Object.keys(lookup).length % TYPE_PALETTE.length];
   }
   return lookup[type];
+}
+
+function cyCssVar(name, fallback) {
+  return () => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
 
 export function createCytoscapeRenderer() {
@@ -69,7 +75,7 @@ export function createCytoscapeRenderer() {
             style: {
               'background-color': (ele) => colorForType(ele.data('type'), typeColors),
               'label': 'data(display)',         // wrapped label; `label` keeps the clean name for popover/click
-              'color': '#ffffff',
+              'color': cyCssVar('--graph-cy-node-label', '#ffffff'),
               'font-size': 7,
               'font-weight': 500,
               'text-valign': 'bottom',
@@ -77,11 +83,11 @@ export function createCytoscapeRenderer() {
               'text-wrap': 'wrap',
               'text-max-width': 260,
               'text-outline-width': 2,
-              'text-outline-color': '#0a0e14',
+              'text-outline-color': cyCssVar('--graph-cy-text-outline', '#0a0e14'),
               'width': 18,
               'height': 18,
               'border-width': 2,
-              'border-color': '#f0f6fc',
+              'border-color': cyCssVar('--graph-cy-node-border', '#f0f6fc'),
               'border-opacity': 0.95,
               'overlay-opacity': 0,           // kill the dark "active" halo
               'overlay-padding': 0,
@@ -107,8 +113,8 @@ export function createCytoscapeRenderer() {
             selector: 'edge',
             style: {
               'width': 3.5,
-              'line-color': '#f0f3f6',
-              'target-arrow-color': '#f0f3f6',
+              'line-color': cyCssVar('--graph-cy-edge', '#f0f3f6'),
+              'target-arrow-color': cyCssVar('--graph-cy-edge', '#f0f3f6'),
               'target-arrow-shape': 'triangle',
               'curve-style': 'bezier',
               'arrow-scale': 1.35,
@@ -247,6 +253,15 @@ export function createCytoscapeRenderer() {
     },
 
     fit() { if (cy) cy.fit(undefined, 40); },
+
+    /** Re-read theme CSS variables and repaint (call after global theme toggle). */
+    refreshTheme() {
+      if (cy) {
+        try {
+          cy.style().update();
+        } catch (_) { /* ignore */ }
+      }
+    },
 
     destroy() {
       if (cy) {
