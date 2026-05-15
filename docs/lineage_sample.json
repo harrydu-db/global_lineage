@@ -1,0 +1,53 @@
+{
+  "catalogExploreBaseUrl": "https://example.cloud.databricks.com/explore/data/demo_catalog/",
+  "lineage": [
+    {
+      "object_full_name": "demo_catalog.gold.orders_daily",
+      "object_type": "VIEW",
+      "upstream_objects": [
+        "demo_catalog.silver.orders_enriched",
+        "demo_catalog.silver.exchange_rates"
+      ]
+    },
+    {
+      "object_full_name": "demo_catalog.silver.orders_enriched",
+      "object_type": "Materialized View",
+      "upstream_objects": ["demo_catalog.bronze.orders_raw", "demo_catalog.bronze.customers"]
+    },
+    {
+      "object_full_name": "demo_catalog.silver.exchange_rates",
+      "object_type": "TABLE",
+      "upstream_objects": ["demo_catalog.bronze.fx_snapshots"]
+    },
+    {
+      "object_full_name": "demo_catalog.gold.revenue_by_region",
+      "object_type": "VIEW",
+      "upstream_objects": ["demo_catalog.gold.orders_daily", "demo_catalog.silver.dim_regions"]
+    },
+    {
+      "object_full_name": "demo_catalog.silver.dim_regions",
+      "object_type": "TABLE",
+      "upstream_objects": ["demo_catalog.bronze.regions_seed"]
+    },
+    {
+      "object_full_name": "demo_catalog.bronze.orders_raw",
+      "object_type": "TABLE",
+      "upstream_objects": []
+    },
+    {
+      "object_full_name": "demo_catalog.bronze.customers",
+      "object_type": "TABLE",
+      "upstream_objects": []
+    },
+    {
+      "object_full_name": "demo_catalog.bronze.fx_snapshots",
+      "object_type": "TABLE",
+      "upstream_objects": []
+    },
+    {
+      "object_full_name": "demo_catalog.bronze.regions_seed",
+      "object_type": "TABLE",
+      "upstream_objects": []
+    }
+  ]
+}

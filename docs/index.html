@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Global Lineage</title>
+    <link rel="stylesheet" href="/styles.css" />
+
+    <!-- Renderer libraries via CDN. To swap a viz framework, see docs/SWITCHING_VIZ.md. -->
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <h1 class="app-title">Global Lineage</h1>
+      <nav id="app-nav" class="app-nav" aria-label="Primary"></nav>
+      <div class="header-lineage-tools">
+        <label class="upload-json-label">
+          <input type="file" id="lineage-file-input" accept=".json,application/json" hidden />
+          <span class="btn-header secondary">Upload JSON</span>
+        </label>
+      </div>
+    </header>
+
+    <main id="page-root" class="page-root" aria-live="polite"></main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
