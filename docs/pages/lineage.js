@@ -9,10 +9,10 @@
 // import below and ensure the new factory satisfies the GraphRenderer
 // contract from renderers/graph/graph-renderer.js.
 
-import { api } from '/api/client.js';
-import { getUnifiedLineageStore } from '/lib/unified-lineage-store.js';
-import { createCytoscapeRenderer as createGraphRenderer } from '/renderers/graph/cytoscape-renderer.js';
-import { SUPPORTED_LAYOUTS } from '/renderers/graph/graph-renderer.js';
+import { api } from '../api/client.js';
+import { getUnifiedLineageStore } from '../lib/unified-lineage-store.js';
+import { createCytoscapeRenderer as createGraphRenderer } from '../renderers/graph/cytoscape-renderer.js';
+import { SUPPORTED_LAYOUTS } from '../renderers/graph/graph-renderer.js';
 
 const DEFAULT_DIRECTION = 'both';
 const DEFAULT_LAYOUT = 'dagre';

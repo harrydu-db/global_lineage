@@ -3,7 +3,8 @@
  * Edge direction: source = upstream table/view, target = dependent object.
  */
 
-export const DEFAULT_LINEAGE_JSON_URL = '/lineage_sample.json';
+/** Resolved against this module so fetches work on GitHub Pages (`/repo/`) and local static servers. */
+export const DEFAULT_LINEAGE_JSON_URL = new URL('../lineage_sample.json', import.meta.url).href;
 
 /** @typedef {{ object_full_name: string, object_type?: string|null, upstream_objects?: string[] }} UnifiedRow */
 

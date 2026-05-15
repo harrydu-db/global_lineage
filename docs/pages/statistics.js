@@ -5,8 +5,8 @@
 // Like the lineage page, this is the only file that knows about the
 // concrete chart renderer. See docs/SWITCHING_VIZ.md to swap libraries.
 
-import { api } from '/api/client.js';
-import { createChartJsRenderer as createChartRenderer } from '/renderers/chart/chartjs-renderer.js';
+import { api } from '../api/client.js';
+import { createChartJsRenderer as createChartRenderer } from '../renderers/chart/chartjs-renderer.js';
 
 export const statisticsPage = {
   id: 'statistics',

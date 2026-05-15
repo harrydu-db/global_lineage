@@ -5,9 +5,9 @@
 //   2. Import it below and add it to the `pages` array.
 // See docs/ADDING_A_PAGE.md for the full contract.
 
-import { api } from '/api/client.js';
-import { lineagePage } from '/pages/lineage.js';
-import { statisticsPage } from '/pages/statistics.js';
+import { api } from './api/client.js';
+import { lineagePage } from './pages/lineage.js';
+import { statisticsPage } from './pages/statistics.js';
 
 const pages = [lineagePage, statisticsPage];
 

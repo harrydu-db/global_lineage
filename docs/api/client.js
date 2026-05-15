@@ -5,7 +5,7 @@ import {
   getUnifiedLineageStore,
   reloadLineageFromJsonText,
   refreshLineageFromActiveUrl,
-} from '/lib/unified-lineage-store.js';
+} from '../lib/unified-lineage-store.js';
 
 export const api = {
   /** Substring search over object_full_name. limit=0 means no cap. */
