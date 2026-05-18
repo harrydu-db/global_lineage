@@ -52,6 +52,8 @@ export const statisticsPage = {
                   <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="schema" title="Sort by schema">Schema</th>
                   <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="upstream_count" title="Sort by upstream count">Upstream</th>
                   <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="downstream_count" title="Sort by downstream count">Downstream</th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="longest_upstream_depth" title="Sort by longest upstream path depth">Longest upstream depth</th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="longest_downstream_depth" title="Sort by longest downstream path depth">Longest downstream depth</th>
                 </tr>
               </thead>
               <tbody id="object-table-body"></tbody>
@@ -98,14 +100,18 @@ export const statisticsPage = {
     let upstreamListByName = new Map();
     /** @type {Map<string, string[]>} */
     let downstreamListByName = new Map();
+    /** @type {Map<string, string[]>} */
+    let longestUpstreamPathByName = new Map();
+    /** @type {Map<string, string[]>} */
+    let longestDownstreamPathByName = new Map();
 
-    /** @type {'object_full_name'|'object_type'|'catalog'|'schema'|'upstream_count'|'downstream_count'} */
+    /** @type {'object_full_name'|'object_type'|'catalog'|'schema'|'upstream_count'|'downstream_count'|'longest_upstream_depth'|'longest_downstream_depth'} */
     let sortKey = 'object_full_name';
     /** @type {'asc'|'desc'} */
     let sortDir = 'asc';
 
     function extractSortValue(row, key) {
-      if (key === 'upstream_count' || key === 'downstream_count') {
+      if (key === 'upstream_count' || key === 'downstream_count' || key === 'longest_upstream_depth' || key === 'longest_downstream_depth') {
         return Number(row[key]) || 0;
       }
       if (key === 'object_type') return String(row.object_type ?? 'Unknown');
@@ -147,7 +153,7 @@ export const statisticsPage = {
       if (!th) return;
       const key = th.getAttribute('data-sort-key');
       if (!key) return;
-      const allowed = new Set(['object_full_name', 'object_type', 'catalog', 'schema', 'upstream_count', 'downstream_count']);
+      const allowed = new Set(['object_full_name', 'object_type', 'catalog', 'schema', 'upstream_count', 'downstream_count', 'longest_upstream_depth', 'longest_downstream_depth']);
       if (!allowed.has(key)) return;
       if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
       else {
@@ -268,6 +274,8 @@ export const statisticsPage = {
     function renderTableBody(rows) {
       upstreamListByName = new Map(rows.map((r) => [r.object_full_name, r.upstream_objects || []]));
       downstreamListByName = new Map(rows.map((r) => [r.object_full_name, r.downstream_objects || []]));
+      longestUpstreamPathByName = new Map(rows.map((r) => [r.object_full_name, r.longest_upstream_path || []]));
+      longestDownstreamPathByName = new Map(rows.map((r) => [r.object_full_name, r.longest_downstream_path || []]));
       tableBodyEl.innerHTML = rows
         .map(
           (r) => {
@@ -278,6 +286,14 @@ export const statisticsPage = {
               : `<td class="num stats-num-muted">0</td>`;
             const downCell = dcnt > 0
               ? `<td class="num"><button type="button" class="stats-relation-count-btn" data-relation="downstream" data-lineage-object="${escapeAttr(r.object_full_name)}" aria-label="Show ${dcnt} downstream object${dcnt === 1 ? '' : 's'}">${dcnt.toLocaleString()}</button></td>`
+              : `<td class="num stats-num-muted">0</td>`;
+            const upDepth = Number(r.longest_upstream_depth) || 0;
+            const downDepth = Number(r.longest_downstream_depth) || 0;
+            const upDepthCell = upDepth > 0
+              ? `<td class="num"><button type="button" class="stats-relation-count-btn" data-path="upstream" data-lineage-object="${escapeAttr(r.object_full_name)}" aria-label="Show longest upstream path (${upDepth} hop${upDepth === 1 ? '' : 's'})">${upDepth.toLocaleString()}</button></td>`
+              : `<td class="num stats-num-muted">0</td>`;
+            const downDepthCell = downDepth > 0
+              ? `<td class="num"><button type="button" class="stats-relation-count-btn" data-path="downstream" data-lineage-object="${escapeAttr(r.object_full_name)}" aria-label="Show longest downstream path (${downDepth} hop${downDepth === 1 ? '' : 's'})">${downDepth.toLocaleString()}</button></td>`
               : `<td class="num stats-num-muted">0</td>`;
             return `
         <tr>
@@ -290,6 +306,8 @@ export const statisticsPage = {
           <td>${escapeHtml(r.schema)}</td>
           ${upCell}
           ${downCell}
+          ${upDepthCell}
+          ${downDepthCell}
         </tr>`;
           }
         )
@@ -314,6 +332,23 @@ export const statisticsPage = {
       listModalClose.focus();
     }
 
+    /** @param {'upstream'|'downstream'} direction */
+    function openStatsPathModal(direction, objectFullName) {
+      const map = direction === 'upstream' ? longestUpstreamPathByName : longestDownstreamPathByName;
+      const path = map.get(objectFullName);
+      if (!path || path.length <= 1) return;
+      const label = direction === 'upstream' ? 'Longest upstream path' : 'Longest downstream path';
+      const hops = path.length - 1;
+      listModalTitle.textContent = `${label} from ${objectFullName} (${hops} hop${hops === 1 ? '' : 's'})`;
+      listModalList.innerHTML = path
+        .map(
+          (name, i) => `<li class="stats-modal-list-item" title="${escapeAttr(name)}"><span class="stats-modal-step">${i + 1}.</span> ${escapeHtml(name)}</li>`
+        )
+        .join('');
+      listModal.removeAttribute('hidden');
+      listModalClose.focus();
+    }
+
     function onTableBodyClick(e) {
       const lineageBtn = e.target.closest('.stats-lineage-btn');
       if (lineageBtn) {
@@ -325,9 +360,15 @@ export const statisticsPage = {
       }
       const btn = e.target.closest('.stats-relation-count-btn');
       if (!btn) return;
-      const relation = btn.getAttribute('data-relation');
       const name = btn.getAttribute('data-lineage-object');
-      if (!name || (relation !== 'upstream' && relation !== 'downstream')) return;
+      if (!name) return;
+      const pathDir = btn.getAttribute('data-path');
+      if (pathDir === 'upstream' || pathDir === 'downstream') {
+        openStatsPathModal(pathDir, name);
+        return;
+      }
+      const relation = btn.getAttribute('data-relation');
+      if (relation !== 'upstream' && relation !== 'downstream') return;
       openStatsListModal(relation, name);
     }
 

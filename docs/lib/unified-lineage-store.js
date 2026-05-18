@@ -191,6 +191,77 @@ function buildStore(rows, catalogExploreBaseUrl) {
 
   const downstreamCountMap = downstreamCounts();
 
+  /**
+   * Longest-path depth (count of edges) from each node, following `adjMap`,
+   * and the next hop along that path so callers can reconstruct it.
+   * Iterative DFS with memoization; cycle edges are treated as length 0 so
+   * a back edge into the current stack does not cause infinite recursion.
+   * @param {Map<string, Set<string>>} adjMap
+   * @returns {{ depth: Map<string, number>, nextHop: Map<string, string> }}
+   */
+  function computeLongestDepths(adjMap) {
+    const depth = new Map();
+    const nextHop = new Map();
+    const STATE_OPEN = 1;
+    const STATE_DONE = 2;
+    const state = new Map();
+    for (const n of sortedNames) {
+      if (state.get(n) === STATE_DONE) continue;
+      const stack = [{ node: n, neighbors: [...(adjMap.get(n) || [])], idx: 0, best: 0, bestNext: null }];
+      state.set(n, STATE_OPEN);
+      while (stack.length) {
+        const frame = stack[stack.length - 1];
+        if (frame.idx >= frame.neighbors.length) {
+          depth.set(frame.node, frame.best);
+          if (frame.bestNext != null) nextHop.set(frame.node, frame.bestNext);
+          state.set(frame.node, STATE_DONE);
+          stack.pop();
+          if (stack.length) {
+            const parent = stack[stack.length - 1];
+            const candidate = 1 + frame.best;
+            if (candidate > parent.best) {
+              parent.best = candidate;
+              parent.bestNext = frame.node;
+            }
+          }
+          continue;
+        }
+        const w = frame.neighbors[frame.idx++];
+        const s = state.get(w);
+        if (s === STATE_DONE) {
+          const candidate = 1 + (depth.get(w) || 0);
+          if (candidate > frame.best) {
+            frame.best = candidate;
+            frame.bestNext = w;
+          }
+        } else if (s === STATE_OPEN) {
+          // cycle — skip this edge
+        } else {
+          state.set(w, STATE_OPEN);
+          stack.push({ node: w, neighbors: [...(adjMap.get(w) || [])], idx: 0, best: 0, bestNext: null });
+        }
+      }
+    }
+    return { depth, nextHop };
+  }
+
+  const { depth: longestUpstreamDepthMap, nextHop: longestUpstreamNextMap } = computeLongestDepths(upstream);
+  const { depth: longestDownstreamDepthMap, nextHop: longestDownstreamNextMap } = computeLongestDepths(downstream);
+
+  /** Reconstruct the longest path starting at `start` by following the nextHop chain. */
+  function reconstructPath(start, nextHop) {
+    if (!start) return [];
+    const path = [start];
+    const seen = new Set([start]);
+    let cur = nextHop.get(start);
+    while (cur && !seen.has(cur)) {
+      path.push(cur);
+      seen.add(cur);
+      cur = nextHop.get(cur);
+    }
+    return path;
+  }
+
   function statsSummary() {
     const typeLabels = new Set();
     for (const n of allNames) typeLabels.add(objectTypes.get(n) ?? 'Unknown');
@@ -247,7 +318,7 @@ function buildStore(rows, catalogExploreBaseUrl) {
   /**
    * Rows for the statistics table. Filters are combined with AND when multiple are set.
    * @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null }} filter
-   * @returns {{ object_full_name: string, object_type: string|null, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[] }[]}
+   * @returns {{ object_full_name: string, object_type: string|null, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], longest_upstream_depth: number, longest_downstream_depth: number, longest_upstream_path: string[], longest_downstream_path: string[] }[]}
    */
   function listObjectsForStats(filter = {}) {
     const typeEq = filter.object_type != null && filter.object_type !== '' ? String(filter.object_type) : null;
@@ -288,6 +359,10 @@ function buildStore(rows, catalogExploreBaseUrl) {
         downstream_objects,
         upstream_count: upstream_objects.length,
         upstream_objects,
+        longest_upstream_depth: longestUpstreamDepthMap.get(object_full_name) || 0,
+        longest_downstream_depth: longestDownstreamDepthMap.get(object_full_name) || 0,
+        longest_upstream_path: reconstructPath(object_full_name, longestUpstreamNextMap),
+        longest_downstream_path: reconstructPath(object_full_name, longestDownstreamNextMap),
       };
     });
   }

@@ -753,6 +753,13 @@ html, body {
   border-bottom: none;
 }
 
+.stats-modal-step {
+  display: inline-block;
+  min-width: 2.2em;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 .stats-table-count {
   margin: 10px 0 0;
   font-size: 12px;
