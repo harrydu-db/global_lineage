@@ -157,6 +157,23 @@ html, body {
   margin: 0;
 }
 
+.lineage-source-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 220px;
+}
+
+.lineage-source-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .btn-header {
   display: inline-flex;
   align-items: center;
@@ -240,6 +257,18 @@ html, body {
 }
 
 .toolbar button:hover { filter: brightness(1.1); }
+
+.toolbar button:disabled,
+.toolbar button[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.toolbar button:disabled:hover,
+.toolbar button[disabled]:hover {
+  filter: none;
+}
 
 .status {
   margin-left: auto;
@@ -693,6 +722,20 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 16px 48px var(--modal-shadow);
+}
+
+.stats-modal-panel--wide {
+  width: min(1100px, 96vw);
+  max-height: min(86vh, 760px);
+}
+
+.stats-table-wrap--in-modal {
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  max-height: none;
+  flex: 1;
+  min-height: 0;
 }
 
 .stats-modal-header {

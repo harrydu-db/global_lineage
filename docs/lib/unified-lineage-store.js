@@ -6,6 +6,34 @@
 /** Resolved against this module so fetches work on GitHub Pages (`/repo/`) and local static servers. */
 export const DEFAULT_LINEAGE_JSON_URL = new URL('../lineage_sample.json', import.meta.url).href;
 
+/** Manifest listing the JSON files dropped into docs/input/. Static hosting can't list directories, so the file lives in the repo. */
+export const INPUT_MANIFEST_URL = new URL('../input/index.json', import.meta.url).href;
+
+/** Resolve a filename inside docs/input/ to an absolute URL. */
+export function inputLineageUrl(filename) {
+  return new URL(`../input/${filename}`, import.meta.url).href;
+}
+
+/**
+ * Fetch the input/ manifest. Returns `{ files: string[] }`. Missing or
+ * malformed manifest is treated as empty so the caller can fall back to the
+ * bundled sample.
+ */
+export async function listInputLineageFiles() {
+  try {
+    const res = await fetch(INPUT_MANIFEST_URL, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return { files: [] };
+    const body = await res.json();
+    const raw = Array.isArray(body) ? body : Array.isArray(body?.files) ? body.files : [];
+    const files = raw
+      .map((f) => String(f || '').trim())
+      .filter((f) => f && f.toLowerCase().endsWith('.json'));
+    return { files };
+  } catch (_) {
+    return { files: [] };
+  }
+}
+
 /** @typedef {{ object_full_name: string, object_type?: string|null, upstream_objects?: string[] }} UnifiedRow */
 
 let loadPromise = null;

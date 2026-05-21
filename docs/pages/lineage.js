@@ -69,6 +69,9 @@ export const lineagePage = {
         </select>
 
         <button id="fit" class="secondary">Fit</button>
+        <button id="download-csv" class="secondary" disabled title="Load lineage first">Download CSV</button>
+        <button id="download-xlsx" class="secondary" disabled title="Load lineage first">Download Excel</button>
+        <button id="view-table" class="secondary" disabled title="Load lineage first">View Table</button>
         <span id="status" class="status">Pick a root object to view its lineage.</span>
       </div>
       <div class="lineage-body">
@@ -82,6 +85,29 @@ export const lineagePage = {
             <p>Type a table name in the search box above and press <kbd>Enter</kbd> or click <strong>Load</strong>.</p>
           </div>
         </aside>
+      </div>
+
+      <div id="lineage-table-modal" class="stats-modal" hidden role="dialog" aria-modal="true" aria-labelledby="lineage-table-modal-title">
+        <div class="stats-modal-backdrop" data-close-modal tabindex="-1"></div>
+        <div class="stats-modal-panel stats-modal-panel--wide">
+          <div class="stats-modal-header">
+            <h3 id="lineage-table-modal-title">Lineage table</h3>
+            <button type="button" class="stats-modal-close" data-close-modal aria-label="Close">×</button>
+          </div>
+          <div class="stats-table-wrap stats-table-wrap--in-modal">
+            <table class="stats-table" id="lineage-table-modal-table">
+              <thead>
+                <tr>
+                  <th>Target</th>
+                  <th>Target Type</th>
+                  <th>Source</th>
+                  <th>Source Type</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     `;
 
@@ -97,7 +123,19 @@ export const lineagePage = {
     const depthEl = root.querySelector('#depth');
     const layoutEl = root.querySelector('#layout');
     const fitBtn = root.querySelector('#fit');
+    const downloadCsvBtn = root.querySelector('#download-csv');
+    const downloadXlsxBtn = root.querySelector('#download-xlsx');
+    const viewTableBtn = root.querySelector('#view-table');
+    const tableModalEl = root.querySelector('#lineage-table-modal');
+    const tableModalTbody = root.querySelector('#lineage-table-modal-table tbody');
+    const tableModalTitle = root.querySelector('#lineage-table-modal-title');
     const sideEl = root.querySelector('#side-panel');
+
+    // Most recently rendered graph — captured after each successful load so
+    // the Download CSV button exports exactly what's on screen.
+    let currentNodes = [];
+    let currentEdges = [];
+    let currentScope = { root: '', direction: '', depth: '' };
 
     const renderer = createGraphRenderer();
     renderer.init(graphHost);
@@ -348,6 +386,20 @@ export const lineagePage = {
         renderer.setLayout(layoutEl.value);
         renderer.render(nodes, edges);
 
+        currentNodes = nodes;
+        currentEdges = edges;
+        currentScope = {
+          root: isAll ? ALL_SENTINEL : rootName,
+          direction: isAll ? 'all' : direction,
+          depth: depth ?? '',
+        };
+        downloadCsvBtn.disabled = false;
+        downloadCsvBtn.title = 'Download the visible graph as CSV';
+        downloadXlsxBtn.disabled = false;
+        downloadXlsxBtn.title = 'Download the visible graph as Excel (.xlsx) with merged cells';
+        viewTableBtn.disabled = false;
+        viewTableBtn.title = 'Open the visible graph as a grouped table';
+
         const doneAt = performance.now();
         const scopeLabel = isAll
           ? 'entire graph'
@@ -381,6 +433,40 @@ export const lineagePage = {
 
     layoutEl.addEventListener('change', () => renderer.setLayout(layoutEl.value));
     fitBtn.addEventListener('click', () => renderer.fit());
+    downloadCsvBtn.addEventListener('click', () => {
+      if (!currentNodes.length) return;
+      downloadLineageCsv(currentNodes, currentEdges, currentScope);
+    });
+    downloadXlsxBtn.addEventListener('click', () => {
+      if (!currentNodes.length) return;
+      try {
+        downloadLineageXlsx(currentNodes, currentEdges, currentScope);
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = `Excel download failed: ${err.message}`;
+        statusEl.classList.add('error');
+      }
+    });
+    viewTableBtn.addEventListener('click', () => {
+      if (!currentNodes.length) return;
+      openLineageTableModal(currentNodes, currentEdges, currentScope);
+    });
+    tableModalEl.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close-modal]')) closeLineageTableModal();
+    });
+    const onDocKeydownForTable = (e) => {
+      if (e.key === 'Escape' && !tableModalEl.hasAttribute('hidden')) closeLineageTableModal();
+    };
+    document.addEventListener('keydown', onDocKeydownForTable);
+
+    function openLineageTableModal(nodes, edges, scope) {
+      tableModalTbody.innerHTML = renderGroupedLineageRows(nodes, edges);
+      tableModalTitle.textContent = lineageTableTitle(scope);
+      tableModalEl.removeAttribute('hidden');
+    }
+    function closeLineageTableModal() {
+      tableModalEl.setAttribute('hidden', '');
+    }
     // Direction / depth changes re-trigger load if a root is already loaded.
     directionEl.addEventListener('change', () => {
       if (lastLoadedRoot) { lastLoadedRoot = null; load(); }
@@ -399,6 +485,7 @@ export const lineagePage = {
     return () => {
       if (popoverHideTimer) clearTimeout(popoverHideTimer);
       window.removeEventListener(GLOBAL_LINEAGE_THEME_EVENT, onGraphTheme);
+      document.removeEventListener('keydown', onDocKeydownForTable);
       renderer.destroy();
     };
   },
@@ -467,3 +554,198 @@ function escapeHtml(s) {
   }[c]));
 }
 function escapeAttr(s) { return escapeHtml(s); }
+
+function csvCell(value) {
+  const s = value == null ? '' : String(value);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Build groups for CSV / Excel / table-modal rendering. Each group represents
+// one target object and the list of sources feeding it. Groups are ordered
+// terminal-first (matching sortEdgesTerminalFirst); "final source tables"
+// (nodes that never appear as a target — no upstream in the current subgraph)
+// get their own group at the end with an empty source so they aren't lost.
+function buildLineageGroups(nodes, edges) {
+  const typeOf = new Map(nodes.map((n) => [n.id, n.type ?? '']));
+  const sortedEdges = sortEdgesTerminalFirst(nodes, edges);
+  const groups = [];
+  const groupIndex = new Map();
+  const keyOf = (target, targetType) => `${target}\t${targetType}`;
+  const pushGroup = (target, targetType) => {
+    const k = keyOf(target, targetType);
+    if (groupIndex.has(k)) return groups[groupIndex.get(k)];
+    const g = { target, targetType, sources: [] };
+    groupIndex.set(k, groups.length);
+    groups.push(g);
+    return g;
+  };
+  const seenAsTarget = new Set();
+  for (const e of sortedEdges) {
+    const g = pushGroup(e.target, typeOf.get(e.target) ?? '');
+    g.sources.push({ source: e.source, sourceType: typeOf.get(e.source) ?? '' });
+    seenAsTarget.add(e.target);
+  }
+  for (const n of nodes) {
+    if (seenAsTarget.has(n.id)) continue;
+    pushGroup(n.id, typeOf.get(n.id) ?? '');
+  }
+  return { groups, typeOf };
+}
+
+function downloadLineageCsv(nodes, edges, scope) {
+  const { groups } = buildLineageGroups(nodes, edges);
+  const header = ['target', 'target_type', 'source', 'source_type'];
+  const rows = [header];
+  for (const g of groups) {
+    if (g.sources.length === 0) {
+      rows.push([g.target, g.targetType, '', '']);
+      continue;
+    }
+    for (const s of g.sources) {
+      rows.push([g.target, g.targetType, s.source, s.sourceType]);
+    }
+  }
+  const csv = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+  // Excel-friendly: prepend UTF-8 BOM so non-ASCII names render correctly.
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = lineageCsvFilename(scope);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Order edges so terminal (most-downstream) targets appear first, then walk
+// back through their upstream sources level by level. Rank = distance from a
+// terminal node, computed by reverse BFS on the visible subgraph only.
+// Nodes inside cycles with no path to a terminal sort to the end.
+function sortEdgesTerminalFirst(nodes, edges) {
+  const outAdj = new Map();
+  const inAdj = new Map();
+  for (const e of edges) {
+    if (!outAdj.has(e.source)) outAdj.set(e.source, new Set());
+    outAdj.get(e.source).add(e.target);
+    if (!inAdj.has(e.target)) inAdj.set(e.target, new Set());
+    inAdj.get(e.target).add(e.source);
+  }
+  const rank = new Map();
+  const queue = [];
+  for (const n of nodes) {
+    const outs = outAdj.get(n.id);
+    if (!outs || outs.size === 0) {
+      rank.set(n.id, 0);
+      queue.push(n.id);
+    }
+  }
+  for (let i = 0; i < queue.length; i++) {
+    const cur = queue[i];
+    const preds = inAdj.get(cur);
+    if (!preds) continue;
+    for (const p of preds) {
+      if (!rank.has(p)) {
+        rank.set(p, rank.get(cur) + 1);
+        queue.push(p);
+      }
+    }
+  }
+  const rankOf = (id) => (rank.has(id) ? rank.get(id) : Number.POSITIVE_INFINITY);
+  return edges.slice().sort((a, b) => {
+    const rt = rankOf(a.target) - rankOf(b.target);
+    if (rt !== 0) return rt;
+    const rs = rankOf(a.source) - rankOf(b.source);
+    if (rs !== 0) return rs;
+    if (a.target !== b.target) return a.target < b.target ? -1 : 1;
+    return a.source < b.source ? -1 : a.source > b.source ? 1 : 0;
+  });
+}
+
+// Render the same content as the CSV (sorted terminal-first) as an HTML
+// table body. Rows are grouped by target+target_type using rowspan so each
+// target appears once and lists all its sources beneath it.
+function renderGroupedLineageRows(nodes, edges) {
+  const { groups } = buildLineageGroups(nodes, edges);
+  const out = [];
+  for (const g of groups) {
+    const rows = g.sources.length || 1;
+    const targetCell = `<td rowspan="${rows}" class="cell-name">${escapeHtml(g.target)}</td>`;
+    const targetTypeCell = `<td rowspan="${rows}">${escapeHtml(g.targetType || '—')}</td>`;
+    if (g.sources.length === 0) {
+      out.push(`<tr>${targetCell}${targetTypeCell}<td>—</td><td>—</td></tr>`);
+      continue;
+    }
+    g.sources.forEach((s, i) => {
+      const lead = i === 0 ? `${targetCell}${targetTypeCell}` : '';
+      out.push(
+        `<tr>${lead}<td class="cell-name">${escapeHtml(s.source)}</td><td>${escapeHtml(s.sourceType || '—')}</td></tr>`,
+      );
+    });
+  }
+  return out.join('');
+}
+
+function downloadLineageXlsx(nodes, edges, scope) {
+  if (typeof window === 'undefined' || typeof window.XLSX === 'undefined') {
+    throw new Error('XLSX library not loaded — check the network for the CDN script.');
+  }
+  const XLSX = window.XLSX;
+  const { groups } = buildLineageGroups(nodes, edges);
+
+  const aoa = [['Target', 'Target Type', 'Source', 'Source Type']];
+  const merges = [];
+  for (const g of groups) {
+    const startRow = aoa.length;
+    if (g.sources.length === 0) {
+      aoa.push([g.target, g.targetType || '', '', '']);
+      continue;
+    }
+    g.sources.forEach((s, i) => {
+      if (i === 0) aoa.push([g.target, g.targetType || '', s.source, s.sourceType || '']);
+      else aoa.push(['', '', s.source, s.sourceType || '']);
+    });
+    if (g.sources.length > 1) {
+      const endRow = startRow + g.sources.length - 1;
+      merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } }); // Target
+      merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } }); // Target Type
+    }
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  if (merges.length) ws['!merges'] = merges;
+  ws['!cols'] = [{ wch: 60 }, { wch: 18 }, { wch: 60 }, { wch: 18 }];
+  ws['!autofilter'] = { ref: `A1:D${aoa.length}` };
+  ws['!freeze'] = { ySplit: 1 };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Lineage');
+  XLSX.writeFile(wb, lineageXlsxFilename(scope));
+}
+
+function lineageXlsxFilename(scope) {
+  const safe = (s) => String(s).replace(/[^A-Za-z0-9._-]+/g, '_');
+  const parts = ['lineage'];
+  const rootPart = scope.root && scope.root !== '(all)' ? safe(scope.root) : 'all';
+  parts.push(rootPart);
+  if (scope.direction && scope.direction !== 'all') parts.push(scope.direction);
+  if (scope.depth !== '' && scope.depth != null) parts.push(`d${scope.depth}`);
+  return `${parts.join('-')}.xlsx`;
+}
+
+function lineageTableTitle(scope) {
+  const rootPart = scope.root && scope.root !== '(all)' ? scope.root : 'entire graph';
+  const dir = scope.direction && scope.direction !== 'all' ? ` · ${scope.direction}` : '';
+  const depth = scope.depth !== '' && scope.depth != null ? ` · depth ${scope.depth}` : '';
+  return `Lineage table — ${rootPart}${dir}${depth}`;
+}
+
+function lineageCsvFilename(scope) {
+  const safe = (s) => String(s).replace(/[^A-Za-z0-9._-]+/g, '_');
+  const parts = ['lineage'];
+  const rootPart = scope.root && scope.root !== '(all)' ? safe(scope.root) : 'all';
+  parts.push(rootPart);
+  if (scope.direction && scope.direction !== 'all') parts.push(scope.direction);
+  if (scope.depth !== '' && scope.depth != null) parts.push(`d${scope.depth}`);
+  return `${parts.join('-')}.csv`;
+}

@@ -61,12 +61,58 @@ function escapeHtml(s) {
 }
 
 window.addEventListener('hashchange', route);
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   setupThemeToggle();
+  await setupLineageInputSelect();
   setupLineageDataControls();
   if (!window.location.hash) window.location.hash = `#/${pages[0].id}`;
   route();
 });
+
+// Populate the input-folder dropdown from input/index.json. If the folder
+// contains at least one JSON, switch the active source to the first file
+// BEFORE the initial route so that page mount loads from there. If the
+// manifest is missing/empty, leave the bundled sample as the default.
+async function setupLineageInputSelect() {
+  const select = document.getElementById('lineage-source-select');
+  if (!select) return;
+  let manifest;
+  try {
+    manifest = await api.listInputLineageFiles();
+  } catch (e) {
+    console.warn('input manifest fetch failed', e);
+    return;
+  }
+  const files = (manifest && manifest.files) || [];
+  if (files.length === 0) {
+    select.hidden = true;
+    return;
+  }
+  select.innerHTML = files
+    .map((f) => `<option value="${escapeAttr(f)}">${escapeHtml(f)}</option>`)
+    .join('');
+  select.value = files[0];
+  select.hidden = false;
+
+  try {
+    await api.loadInputLineageFile(files[0]);
+  } catch (e) {
+    console.error('failed to load default input file', e);
+  }
+
+  select.addEventListener('change', async () => {
+    const filename = select.value;
+    if (!filename) return;
+    try {
+      await api.loadInputLineageFile(filename);
+      await route();
+    } catch (e) {
+      console.error('failed to load input file', e);
+    }
+  });
+}
+
+function escapeAttr(s) { return escapeHtml(s); }
 
 function setupThemeToggle() {
   const btn = document.getElementById('theme-toggle');

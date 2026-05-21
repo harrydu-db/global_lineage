@@ -5,6 +5,9 @@ import {
   getUnifiedLineageStore,
   reloadLineageFromJsonText,
   refreshLineageFromActiveUrl,
+  reloadLineageFromUrl,
+  listInputLineageFiles,
+  inputLineageUrl,
 } from '../lib/unified-lineage-store.js';
 
 export const api = {
@@ -37,6 +40,16 @@ export const api = {
   refreshLineage: async () => {
     await refreshLineageFromActiveUrl();
     return { ok: true, message: 'Lineage JSON reloaded.' };
+  },
+
+  /** List JSON files available in docs/input/ via the manifest. */
+  listInputLineageFiles: async () => listInputLineageFiles(),
+
+  /** Load one of the JSON files from docs/input/ by filename. */
+  loadInputLineageFile: async (filename) => {
+    if (!filename) throw new Error('filename is required');
+    await reloadLineageFromUrl(inputLineageUrl(filename));
+    return { ok: true, message: `Loaded ${filename}` };
   },
 
   /** Replace lineage with the contents of a user-selected JSON file (same shape as lineage_sample.json). */

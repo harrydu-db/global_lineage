@@ -30,6 +30,7 @@
     <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   </head>
   <body>
     <header class="app-header">
@@ -62,6 +63,7 @@
           <input type="file" id="lineage-file-input" accept=".json,application/json" hidden />
           <span class="btn-header secondary">Load Lineage JSON</span>
         </label>
+        <select id="lineage-source-select" class="lineage-source-select" hidden title="Pick an input JSON" aria-label="Pick an input JSON"></select>
       </div>
     </header>
 
