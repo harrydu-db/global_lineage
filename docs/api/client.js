@@ -18,10 +18,15 @@ export const api = {
   },
 
   /** Subgraph reachable from `root`. direction: 'down' | 'up' | 'both'. */
-  lineageFrom: async (root, { direction = 'down', depth = null } = {}) => {
+  lineageFrom: async (root, { direction = 'down', depth = null, stopAtTable = false } = {}) => {
     const store = await getUnifiedLineageStore();
     const maxDepth = depth != null && depth !== '' ? Number(depth) : null;
-    return store.subgraphFor(root, direction, Number.isFinite(maxDepth) ? maxDepth : null);
+    return store.subgraphFor(
+      root,
+      direction,
+      Number.isFinite(maxDepth) ? maxDepth : null,
+      { stopAtTable },
+    );
   },
 
   /** Whole graph: every object + every edge. */

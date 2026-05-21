@@ -61,6 +61,11 @@ export const lineagePage = {
           <option value="5">5</option>
         </select>
 
+        <label for="stop-at-table" class="toolbar-check" title="When walking upstream, include tables but do not show what feeds them.">
+          <input id="stop-at-table" type="checkbox" />
+          <span>Stop at table</span>
+        </label>
+
         <label for="layout">Layout</label>
         <select id="layout">
           ${SUPPORTED_LAYOUTS.map((l) =>
@@ -121,6 +126,7 @@ export const lineagePage = {
     const tierTableEl = root.querySelector('#tier-table');
     const directionEl = root.querySelector('#direction');
     const depthEl = root.querySelector('#depth');
+    const stopAtTableEl = root.querySelector('#stop-at-table');
     const layoutEl = root.querySelector('#layout');
     const fitBtn = root.querySelector('#fit');
     const downloadCsvBtn = root.querySelector('#download-csv');
@@ -361,11 +367,12 @@ export const lineagePage = {
       try {
         const depth = depthEl.value ? Number(depthEl.value) : null;
         const direction = directionEl.value;
+        const stopAtTable = !!stopAtTableEl.checked;
         const isAll = rootName === ALL_SENTINEL;
         const t0 = performance.now();
         const result = isAll
           ? await api.lineageAll()
-          : await api.lineageFrom(rootName, { direction, depth });
+          : await api.lineageFrom(rootName, { direction, depth, stopAtTable });
         const fetchedAt = performance.now();
         const { nodes, edges } = result;
 
@@ -472,6 +479,9 @@ export const lineagePage = {
       if (lastLoadedRoot) { lastLoadedRoot = null; load(); }
     });
     depthEl.addEventListener('change', () => {
+      if (lastLoadedRoot) { lastLoadedRoot = null; load(); }
+    });
+    stopAtTableEl.addEventListener('change', () => {
       if (lastLoadedRoot) { lastLoadedRoot = null; load(); }
     });
     rootInputEl.addEventListener('keydown', (e) => {

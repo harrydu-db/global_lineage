@@ -230,6 +230,19 @@ html, body {
   text-align-last: center;
 }
 
+.toolbar label.toolbar-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toolbar label.toolbar-check input {
+  margin: 0;
+  cursor: pointer;
+}
+
 .toolbar select.tier-select {
   min-width: 0;
   max-width: 200px;

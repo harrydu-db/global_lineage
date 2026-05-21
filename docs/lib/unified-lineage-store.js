@@ -142,22 +142,32 @@ function buildStore(rows, catalogExploreBaseUrl) {
 
   const sortedNames = [...allNames].sort();
 
+  const isTable = (id) => {
+    const t = objectTypes.get(id);
+    return typeof t === 'string' && t.toLowerCase() === 'table';
+  };
+
   /**
    * @param {string} root
    * @param {'down'|'up'|'both'} direction
    * @param {number|null|undefined} maxDepth hops from root; null = unlimited
+   * @param {{ stopAtTable?: boolean }} [opts] when stopAtTable is set, upstream
+   *   traversal includes any TABLE node it reaches but does not walk further
+   *   through it (the root is always allowed to expand).
    */
-  function collectNodeIds(root, direction, maxDepth) {
+  function collectNodeIds(root, direction, maxDepth, opts = {}) {
+    const stopAtTable = !!opts.stopAtTable;
     const out = new Set();
     if (!root) return out;
     out.add(root);
 
-    function bfs(adjGetter) {
+    function bfs(adjGetter, applyStop) {
       const queue = [[root, 0]];
       let i = 0;
       while (i < queue.length) {
         const [n, dist] = queue[i++];
         if (maxDepth != null && maxDepth !== '' && dist >= maxDepth) continue;
+        if (applyStop && n !== root && isTable(n)) continue;
         const nexts = adjGetter(n) || [];
         for (const w of nexts) {
           if (!out.has(w)) {
@@ -169,10 +179,10 @@ function buildStore(rows, catalogExploreBaseUrl) {
     }
 
     if (direction === 'down' || direction === 'both') {
-      bfs((n) => [...(downstream.get(n) || [])]);
+      bfs((n) => [...(downstream.get(n) || [])], false);
     }
     if (direction === 'up' || direction === 'both') {
-      bfs((n) => [...(upstream.get(n) || [])]);
+      bfs((n) => [...(upstream.get(n) || [])], stopAtTable);
     }
     return out;
   }
@@ -186,8 +196,8 @@ function buildStore(rows, catalogExploreBaseUrl) {
     }));
   }
 
-  function subgraphFor(root, direction, maxDepth) {
-    const ids = collectNodeIds(root, direction, maxDepth);
+  function subgraphFor(root, direction, maxDepth, opts = {}) {
+    const ids = collectNodeIds(root, direction, maxDepth, opts);
     const edgeSet = new Set();
     const edges = [];
     for (const e of allEdges) {
