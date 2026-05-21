@@ -738,7 +738,9 @@ function lineageXlsxFilename(scope) {
   const parts = ['lineage'];
   const rootPart = scope.root && scope.root !== '(all)' ? safe(scope.root) : 'all';
   parts.push(rootPart);
-  if (scope.direction && scope.direction !== 'all') parts.push(scope.direction);
+  if (scope.direction && scope.direction !== 'all' && scope.direction !== 'both') {
+    parts.push(scope.direction);
+  }
   if (scope.depth !== '' && scope.depth != null) parts.push(`d${scope.depth}`);
   return `${parts.join('-')}.xlsx`;
 }
@@ -755,7 +757,9 @@ function lineageCsvFilename(scope) {
   const parts = ['lineage'];
   const rootPart = scope.root && scope.root !== '(all)' ? safe(scope.root) : 'all';
   parts.push(rootPart);
-  if (scope.direction && scope.direction !== 'all') parts.push(scope.direction);
+  if (scope.direction && scope.direction !== 'all' && scope.direction !== 'both') {
+    parts.push(scope.direction);
+  }
   if (scope.depth !== '' && scope.depth != null) parts.push(`d${scope.depth}`);
   return `${parts.join('-')}.csv`;
 }
