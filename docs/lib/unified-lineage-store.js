@@ -142,9 +142,14 @@ function buildStore(rows, catalogExploreBaseUrl) {
 
   const sortedNames = [...allNames].sort();
 
-  const isTable = (id) => {
+  // Nodes that act as upstream "boundaries" when the stop-at-table option is
+  // enabled. Currently: TABLE and MATERIALIZED VIEW (both treated as a source
+  // of truth — we include them but don't traverse past them).
+  const isStopBoundary = (id) => {
     const t = objectTypes.get(id);
-    return typeof t === 'string' && t.toLowerCase() === 'table';
+    if (typeof t !== 'string') return false;
+    const lower = t.toLowerCase();
+    return lower === 'table' || lower === 'materialized view';
   };
 
   /**
@@ -152,8 +157,8 @@ function buildStore(rows, catalogExploreBaseUrl) {
    * @param {'down'|'up'|'both'} direction
    * @param {number|null|undefined} maxDepth hops from root; null = unlimited
    * @param {{ stopAtTable?: boolean }} [opts] when stopAtTable is set, upstream
-   *   traversal includes any TABLE node it reaches but does not walk further
-   *   through it (the root is always allowed to expand).
+   *   traversal includes any TABLE or MATERIALIZED VIEW node it reaches but
+   *   does not walk further through it (the root is always allowed to expand).
    */
   function collectNodeIds(root, direction, maxDepth, opts = {}) {
     const stopAtTable = !!opts.stopAtTable;
@@ -167,7 +172,7 @@ function buildStore(rows, catalogExploreBaseUrl) {
       while (i < queue.length) {
         const [n, dist] = queue[i++];
         if (maxDepth != null && maxDepth !== '' && dist >= maxDepth) continue;
-        if (applyStop && n !== root && isTable(n)) continue;
+        if (applyStop && n !== root && isStopBoundary(n)) continue;
         const nexts = adjGetter(n) || [];
         for (const w of nexts) {
           if (!out.has(w)) {

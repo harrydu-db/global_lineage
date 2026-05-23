@@ -61,7 +61,7 @@ export const lineagePage = {
           <option value="5">5</option>
         </select>
 
-        <label for="stop-at-table" class="toolbar-check" title="When walking upstream, include tables but do not show what feeds them.">
+        <label for="stop-at-table" class="toolbar-check" title="When walking upstream, include tables and materialized views but do not show what feeds them.">
           <input id="stop-at-table" type="checkbox" />
           <span>Stop at table</span>
         </label>
