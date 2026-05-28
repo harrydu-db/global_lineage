@@ -43,8 +43,12 @@ let activeFetchUrl = DEFAULT_LINEAGE_JSON_URL;
 /**
  * @param {string} objectFullName `catalog.schema.table` (table segment may contain dots)
  * @param {string} catalogExploreBaseUrl e.g. `https://host/explore/data/edsp_odp_unified/`
+ * @param {Record<string, string>} [catalogMapping] Optional mapping from the catalog
+ *   in `object_full_name` to the catalog to use in the rendered URL (e.g. mapping
+ *   a Redshift database name to its Unity Catalog federated counterpart). Only
+ *   the URL is rewritten; lookup keys keep the original catalog.
  */
-export function buildExploreUrl(objectFullName, catalogExploreBaseUrl) {
+export function buildExploreUrl(objectFullName, catalogExploreBaseUrl, catalogMapping) {
   const baseStr = String(catalogExploreBaseUrl || '').trim();
   const enc = (s) => encodeURIComponent(s);
   const segments = String(objectFullName).split('.');
@@ -53,27 +57,32 @@ export function buildExploreUrl(objectFullName, catalogExploreBaseUrl) {
   }
   const [cat, sch, ...tblParts] = segments;
   const tbl = tblParts.join('.');
+  const mappedCat =
+    catalogMapping && Object.prototype.hasOwnProperty.call(catalogMapping, cat)
+      ? String(catalogMapping[cat] ?? cat)
+      : cat;
+  const urlSegments = [mappedCat, sch, ...tblParts];
   if (!baseStr) {
-    const path = segments.map(enc).join('/');
+    const path = urlSegments.map(enc).join('/');
     return `https://nvidia-odp-or1.cloud.databricks.com/explore/data/${path}`;
   }
   let u;
   try {
     u = new URL(baseStr);
   } catch {
-    return `${baseStr.replace(/\/?$/, '/')}${segments.map(enc).join('/')}`;
+    return `${baseStr.replace(/\/?$/, '/')}${urlSegments.map(enc).join('/')}`;
   }
   const pathNoTrail = u.pathname.replace(/\/+$/, '');
   const m = pathNoTrail.match(/^(\/explore\/data)\/([^/]+)$/);
   if (!m) {
-    return `${u.origin}${pathNoTrail}/${segments.map(enc).join('/')}`;
+    return `${u.origin}${pathNoTrail}/${urlSegments.map(enc).join('/')}`;
   }
   const dataRoot = `${u.origin}${m[1]}`;
   const baseCatalog = m[2];
-  if (cat === baseCatalog) {
+  if (mappedCat === baseCatalog) {
     return `${u.origin}${pathNoTrail}/${enc(sch)}/${enc(tbl)}`;
   }
-  return `${dataRoot}/${enc(cat)}/${enc(sch)}/${enc(tbl)}`;
+  return `${dataRoot}/${enc(mappedCat)}/${enc(sch)}/${enc(tbl)}`;
 }
 
 function addToAdj(adj, from, to) {
@@ -83,29 +92,38 @@ function addToAdj(adj, from, to) {
 
 /**
  * @param {unknown} body
- * @returns {{ rows: UnifiedRow[], catalogExploreBaseUrl: string }}
+ * @returns {{ rows: UnifiedRow[], catalogExploreBaseUrl: string, catalogMapping: Record<string, string> }}
  */
 export function parseLineageBody(body) {
   let rows;
   let catalogExploreBaseUrl = '';
+  let catalogMapping = {};
   if (Array.isArray(body)) {
     rows = body;
   } else if (body && typeof body === 'object' && Array.isArray(body.lineage)) {
     rows = body.lineage;
     catalogExploreBaseUrl = String(body.catalogExploreBaseUrl || '').trim();
+    if (body.catalogMapping && typeof body.catalogMapping === 'object' && !Array.isArray(body.catalogMapping)) {
+      for (const [k, v] of Object.entries(body.catalogMapping)) {
+        if (typeof k !== 'string' || !k) continue;
+        if (v == null) continue;
+        catalogMapping[k] = String(v);
+      }
+    }
   } else {
     throw new Error(
       'Lineage JSON must be { catalogExploreBaseUrl?, lineage: [...] } or a legacy top-level array',
     );
   }
-  return { rows, catalogExploreBaseUrl };
+  return { rows, catalogExploreBaseUrl, catalogMapping };
 }
 
 /**
  * @param {UnifiedRow[]} rows
  * @param {string} catalogExploreBaseUrl
+ * @param {Record<string, string>} [catalogMapping]
  */
-function buildStore(rows, catalogExploreBaseUrl) {
+function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
   const edgeKey = new Set();
   /** @type {{ source: string, target: string }[]} */
   const allEdges = [];
@@ -428,7 +446,7 @@ function buildStore(rows, catalogExploreBaseUrl) {
   }
 
   function exploreUrlFor(fullName) {
-    return buildExploreUrl(fullName, catalogExploreBaseUrl);
+    return buildExploreUrl(fullName, catalogExploreBaseUrl, catalogMapping);
   }
 
   return {
@@ -444,6 +462,7 @@ function buildStore(rows, catalogExploreBaseUrl) {
     objectDetail,
     exploreUrlFor,
     catalogExploreBaseUrl,
+    catalogMapping,
   };
 }
 
@@ -454,8 +473,8 @@ async function fetchAndBuild(url) {
     throw new Error(`${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
   }
   const body = await res.json();
-  const { rows, catalogExploreBaseUrl } = parseLineageBody(body);
-  return buildStore(rows, catalogExploreBaseUrl);
+  const { rows, catalogExploreBaseUrl, catalogMapping } = parseLineageBody(body);
+  return buildStore(rows, catalogExploreBaseUrl, catalogMapping);
 }
 
 /**
@@ -479,9 +498,9 @@ export async function reloadLineageFromJsonText(text) {
   } catch (e) {
     throw new Error(`Invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
   }
-  const { rows, catalogExploreBaseUrl } = parseLineageBody(body);
+  const { rows, catalogExploreBaseUrl, catalogMapping } = parseLineageBody(body);
   activeFetchUrl = '';
-  loadPromise = Promise.resolve(buildStore(rows, catalogExploreBaseUrl));
+  loadPromise = Promise.resolve(buildStore(rows, catalogExploreBaseUrl, catalogMapping));
   return loadPromise;
 }
 

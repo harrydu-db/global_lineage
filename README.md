@@ -41,6 +41,9 @@ The loader accepts either:
 ```json
 {
   "catalogExploreBaseUrl": "https://your-workspace.cloud.databricks.com/explore/data/your_catalog/",
+  "catalogMapping": {
+    "source_catalog_name": "uc_catalog_name"
+  },
   "lineage": [
     {
       "object_full_name": "catalog.schema.table_or_view",
@@ -59,6 +62,7 @@ The loader accepts either:
 - **`upstream_objects`** — Names of **upstream** dependencies. The app builds directed edges **source → target** where **source** is upstream and **target** is the row’s `object_full_name` (the dependent).
 - **`object_type`** — Optional string (e.g. `TABLE`, `VIEW`); used in the UI and stats.
 - **`catalogExploreBaseUrl`** — Optional. When set, node details and popovers can link into the workspace **Data** explorer for that object. If omitted, the code still builds a sensible explore URL for common Databricks host patterns (see `buildExploreUrl` in `docs/lib/unified-lineage-store.js`).
+- **`catalogMapping`** — Optional `{ source_catalog: target_catalog }` lookup. When the catalog segment of `object_full_name` has an entry in this map, the **Open** explore URL is rewritten to use the mapped catalog (e.g. mapping a Redshift database name to its Unity Catalog federated counterpart). Node labels, search, dropdowns, and graph adjacency continue to use the original catalog from `object_full_name`.
 
 Bundled examples:
 
