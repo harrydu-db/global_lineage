@@ -79,15 +79,40 @@ export const lineagePage = {
         <button id="view-table" class="secondary" disabled title="Load lineage first">View Table</button>
         <span id="status" class="status">Pick a root object to view its lineage.</span>
       </div>
-      <div class="lineage-body">
+      <div class="lineage-body" id="lineage-body">
         <div class="graph-host">
           <div id="graph" class="graph-canvas"></div>
           <div id="node-popover" class="node-popover" role="tooltip" hidden></div>
+          <button
+            type="button"
+            id="side-panel-show"
+            class="side-panel-show"
+            aria-label="Show details panel"
+            title="Show details"
+            hidden
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Details</span>
+          </button>
         </div>
         <aside class="side-panel" id="side-panel">
-          <div class="empty-state">
-            <p>No graph loaded yet.</p>
-            <p>Type a table name in the search box above and press <kbd>Enter</kbd> or click <strong>Load</strong>.</p>
+          <div class="side-panel-header">
+            <h2 class="side-panel-heading">Details</h2>
+            <button
+              type="button"
+              id="side-panel-hide"
+              class="side-panel-hide"
+              aria-label="Hide details panel"
+              title="Hide details"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <div class="side-panel-body" id="side-panel-body">
+            <div class="empty-state">
+              <p>No graph loaded yet.</p>
+              <p>Type a table name in the search box above and press <kbd>Enter</kbd> or click <strong>Load</strong>.</p>
+            </div>
           </div>
         </aside>
       </div>
@@ -135,7 +160,24 @@ export const lineagePage = {
     const tableModalEl = root.querySelector('#lineage-table-modal');
     const tableModalTbody = root.querySelector('#lineage-table-modal-table tbody');
     const tableModalTitle = root.querySelector('#lineage-table-modal-title');
-    const sideEl = root.querySelector('#side-panel');
+    const lineageBodyEl = root.querySelector('#lineage-body');
+    const sidePanelEl = root.querySelector('#side-panel');
+    const sideEl = root.querySelector('#side-panel-body');
+    const sidePanelHideBtn = root.querySelector('#side-panel-hide');
+    const sidePanelShowBtn = root.querySelector('#side-panel-show');
+
+    const SIDE_PANEL_COLLAPSED_KEY = 'global-lineage-side-panel-collapsed';
+    function applySidePanelCollapsed(collapsed) {
+      lineageBodyEl.classList.toggle('lineage-body--panel-collapsed', collapsed);
+      sidePanelEl.classList.toggle('side-panel--collapsed', collapsed);
+      sidePanelEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+      sidePanelShowBtn.hidden = !collapsed;
+    }
+    let sidePanelCollapsed = false;
+    try {
+      sidePanelCollapsed = localStorage.getItem(SIDE_PANEL_COLLAPSED_KEY) === '1';
+    } catch (e) { /* ignore */ }
+    applySidePanelCollapsed(sidePanelCollapsed);
 
     // Most recently rendered graph — captured after each successful load so
     // the Download CSV button exports exactly what's on screen.
@@ -145,6 +187,16 @@ export const lineagePage = {
 
     const renderer = createGraphRenderer();
     renderer.init(graphHost);
+
+    function setSidePanelCollapsed(collapsed) {
+      sidePanelCollapsed = collapsed;
+      applySidePanelCollapsed(collapsed);
+      try { localStorage.setItem(SIDE_PANEL_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) { /* ignore */ }
+      // The graph host width just changed — let cytoscape recompute its viewport.
+      try { renderer.fit?.(); } catch (e) { /* ignore */ }
+    }
+    sidePanelHideBtn.addEventListener('click', () => setSidePanelCollapsed(true));
+    sidePanelShowBtn.addEventListener('click', () => setSidePanelCollapsed(false));
 
     const onGraphTheme = () => {
       if (typeof renderer.refreshTheme === 'function') renderer.refreshTheme();
@@ -157,6 +209,9 @@ export const lineagePage = {
         return;
       }
       sideEl.innerHTML = renderNodeDetails(node, exploreUrlFor);
+      // If the user clicked a node while the panel was hidden, surface the
+      // details automatically so they don't have to click "Details" too.
+      if (sidePanelCollapsed) setSidePanelCollapsed(false);
     });
 
     // Double-click any node → make it the new root and reload.
@@ -555,7 +610,7 @@ function renderNodeDetails(node, exploreUrlFor) {
     <div class="label">Unity Catalog</div>
     <div class="value"><a href="${escapeAttr(url)}" target="_blank" rel="noopener">Open ↗</a></div>
   </div>`;
-  return `<h2>Details</h2>${rows}${link}`;
+  return `${rows}${link}`;
 }
 
 function escapeHtml(s) {
