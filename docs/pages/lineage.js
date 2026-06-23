@@ -66,6 +66,11 @@ export const lineagePage = {
           <span>Stop at table</span>
         </label>
 
+        <label for="certified-only" class="toolbar-check" title="Only show objects that are certified in Unity Catalog.">
+          <input id="certified-only" type="checkbox" />
+          <span>Certified only</span>
+        </label>
+
         <label for="layout">Layout</label>
         <select id="layout">
           ${SUPPORTED_LAYOUTS.map((l) =>
@@ -152,6 +157,7 @@ export const lineagePage = {
     const directionEl = root.querySelector('#direction');
     const depthEl = root.querySelector('#depth');
     const stopAtTableEl = root.querySelector('#stop-at-table');
+    const certifiedOnlyEl = root.querySelector('#certified-only');
     const layoutEl = root.querySelector('#layout');
     const fitBtn = root.querySelector('#fit');
     const downloadCsvBtn = root.querySelector('#download-csv');
@@ -429,7 +435,17 @@ export const lineagePage = {
           ? await api.lineageAll()
           : await api.lineageFrom(rootName, { direction, depth, stopAtTable });
         const fetchedAt = performance.now();
-        const { nodes, edges } = result;
+        let { nodes, edges } = result;
+
+        // "Certified only" — keep certified nodes and edges that connect two
+        // certified nodes. Applied client-side after the reachability fetch.
+        if (certifiedOnlyEl.checked) {
+          const keep = new Set(
+            nodes.filter((n) => n.data && n.data.certified).map((n) => n.id),
+          );
+          nodes = nodes.filter((n) => keep.has(n.id));
+          edges = edges.filter((e) => keep.has(e.source) && keep.has(e.target));
+        }
 
         // For very large views, dagre is too slow — auto-switch to a
         // O(n) layout. User can still flip back with the dropdown.
@@ -539,6 +555,9 @@ export const lineagePage = {
     stopAtTableEl.addEventListener('change', () => {
       if (lastLoadedRoot) { lastLoadedRoot = null; load(); }
     });
+    certifiedOnlyEl.addEventListener('change', () => {
+      if (lastLoadedRoot) { lastLoadedRoot = null; load(); }
+    });
     rootInputEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -559,9 +578,13 @@ export const lineagePage = {
 function renderPopover(node, exploreUrlFor) {
   const name = node.label || node.id;
   const url = exploreUrlFor(name);
-  const rows = [['Type', node.type || '—']]
+  const certified = !!(node.data && node.data.certified);
+  const rowDefs = [['Type', escapeHtml(node.type || '—')]];
+  // Only surface certification when the object is actually certified.
+  if (certified) rowDefs.push(['Certified', certifiedBadge(true)]);
+  const rows = rowDefs
     .map(
-      ([k, v]) => `<div class="row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`
+      ([k, v]) => `<div class="row"><span class="k">${escapeHtml(k)}</span><span class="v">${v}</span></div>`
     )
     .join('');
   const link = `<div class="row"><span class="k">Catalog</span><span class="v"><a href="${escapeAttr(url)}" target="_blank" rel="noopener">Open in Unity Catalog ↗</a></span></div>`;
@@ -590,19 +613,28 @@ function positionPopover(popoverEl, mouseEvent, hostEl) {
   popoverEl.style.top = `${top}px`;
 }
 
+function certifiedBadge(certified) {
+  return certified
+    ? '<span class="cert-badge cert-badge--yes" title="Certified in Unity Catalog">✓ Certified</span>'
+    : '<span class="cert-badge cert-badge--no" title="Not certified">Not certified</span>';
+}
+
 function renderNodeDetails(node, exploreUrlFor) {
   const name = node.label || node.id;
   const url = exploreUrlFor(name);
+  const certified = !!(node.data && node.data.certified);
   const fields = [
-    ['Object', name],
-    ['Type', node.type || '—'],
+    ['Object', escapeHtml(name)],
+    ['Type', escapeHtml(node.type || '—')],
   ];
+  // Only surface certification when the object is actually certified.
+  if (certified) fields.push(['Certified', certifiedBadge(true)]);
   const rows = fields
     .map(
       ([k, v]) => `
         <div class="field">
           <div class="label">${escapeHtml(k)}</div>
-          <div class="value">${escapeHtml(v)}</div>
+          <div class="value">${v}</div>
         </div>`
     )
     .join('');

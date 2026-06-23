@@ -48,6 +48,7 @@ export const statisticsPage = {
                 <tr>
                   <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="object_full_name" title="Sort by object">Object</th>
                   <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="object_type" title="Sort by type">Type</th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="certified" title="Sort by certification">Certified</th>
                   <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="catalog" title="Sort by catalog">Catalog</th>
                   <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="schema" title="Sort by schema">Schema</th>
                   <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="upstream_count" title="Sort by upstream count">Upstream</th>
@@ -114,6 +115,7 @@ export const statisticsPage = {
       if (key === 'upstream_count' || key === 'downstream_count' || key === 'longest_upstream_depth' || key === 'longest_downstream_depth') {
         return Number(row[key]) || 0;
       }
+      if (key === 'certified') return row.certified ? 1 : 0;
       if (key === 'object_type') return String(row.object_type ?? 'Unknown');
       return String(row[key] ?? '');
     }
@@ -153,7 +155,7 @@ export const statisticsPage = {
       if (!th) return;
       const key = th.getAttribute('data-sort-key');
       if (!key) return;
-      const allowed = new Set(['object_full_name', 'object_type', 'catalog', 'schema', 'upstream_count', 'downstream_count', 'longest_upstream_depth', 'longest_downstream_depth']);
+      const allowed = new Set(['object_full_name', 'object_type', 'certified', 'catalog', 'schema', 'upstream_count', 'downstream_count', 'longest_upstream_depth', 'longest_downstream_depth']);
       if (!allowed.has(key)) return;
       if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
       else {
@@ -204,7 +206,7 @@ export const statisticsPage = {
     }
 
     function filterSummary() {
-      if (!tableFilter || (!tableFilter.object_type && !tableFilter.catalog && !tableFilter.schema && !tableFilter.object_full_name)) {
+      if (!tableFilter || (!tableFilter.object_type && !tableFilter.catalog && !tableFilter.schema && !tableFilter.object_full_name && tableFilter.certified === undefined)) {
         return '';
       }
       const parts = [];
@@ -212,13 +214,14 @@ export const statisticsPage = {
         parts.push(`object = ${tableFilter.object_full_name}`);
       } else {
         if (tableFilter.object_type) parts.push(`type = ${tableFilter.object_type}`);
+        if (tableFilter.certified !== undefined) parts.push(`certified = ${tableFilter.certified ? 'yes' : 'no'}`);
         if (tableFilter.catalog) parts.push(`catalog = ${tableFilter.catalog}`);
         if (tableFilter.schema) parts.push(`schema = ${tableFilter.schema}`);
       }
       return parts.join(' · ');
     }
 
-    /** @param {'type'|'catalog'|'object'} source */
+    /** @param {'type'|'catalog'|'object'|'certified'} source */
     function setFilterFromChart(source, label) {
       if (source === 'object') {
         tableFilter = { object_full_name: label };
@@ -230,6 +233,10 @@ export const statisticsPage = {
       }
       const prev = tableFilter && !tableFilter.object_full_name ? { ...tableFilter } : {};
       delete prev.object_full_name;
+      if (source === 'certified') {
+        prev.certified = label === 'Certified';
+        catalogSelect.value = prev.catalog || '';
+      }
       if (source === 'type') {
         prev.object_type = label;
         catalogSelect.value = prev.catalog || '';
@@ -246,12 +253,13 @@ export const statisticsPage = {
     }
 
     function applyTableFilter() {
-      const spec = tableFilter && (tableFilter.object_full_name || tableFilter.object_type || tableFilter.catalog || tableFilter.schema)
+      const spec = tableFilter && (tableFilter.object_full_name || tableFilter.object_type || tableFilter.catalog || tableFilter.schema || tableFilter.certified !== undefined)
         ? tableFilter
         : {};
       const rows = allTableRows.filter((r) => {
         if (spec.object_full_name) return r.object_full_name === spec.object_full_name;
         if (spec.object_type && (r.object_type ?? 'Unknown') !== spec.object_type) return false;
+        if (spec.certified !== undefined && Boolean(r.certified) !== spec.certified) return false;
         if (spec.catalog && r.catalog !== spec.catalog) return false;
         if (spec.schema && r.schema !== spec.schema) return false;
         return true;
@@ -302,6 +310,9 @@ export const statisticsPage = {
             <button type="button" class="stats-lineage-btn" data-open-lineage="${escapeAttr(r.object_full_name)}" aria-label="Open in Lineage">Lineage</button>
           </td>
           <td>${escapeHtml(r.object_type ?? 'Unknown')}</td>
+          <td>${r.certified
+            ? '<span class="cert-badge cert-badge--yes" title="Certified in Unity Catalog">✓ Certified</span>'
+            : '<span class="cert-badge cert-badge--no">—</span>'}</td>
           <td>${escapeHtml(r.catalog)}</td>
           <td>${escapeHtml(r.schema)}</td>
           ${upCell}
@@ -453,10 +464,31 @@ export const statisticsPage = {
       refillSchemaOptions();
       summaryEl.innerHTML = renderSummary(summary);
 
+      const certBreakdown = () => {
+        let yes = 0;
+        let no = 0;
+        for (const r of allTableRows) {
+          if (r.certified) yes += 1;
+          else no += 1;
+        }
+        return [
+          { label: 'Certified', count: yes },
+          { label: 'Not certified', count: no },
+        ];
+      };
+
       const rType = chartCard('Objects by type');
       rType.render('pie', byType, {
         onSegmentClick: ({ label }) => setFilterFromChart('type', label),
       });
+
+      const hasCertified = (summary.certified_objects || 0) > 0;
+      const rCert = hasCertified ? chartCard('Certified vs not certified') : null;
+      if (rCert) {
+        rCert.render('pie', certBreakdown(), {
+          onSegmentClick: ({ label }) => setFilterFromChart('certified', label),
+        });
+      }
 
       const rCat = chartCard('Objects by catalog (top 20)');
       rCat.render('horizontalBar', byPipeline, {
@@ -479,6 +511,11 @@ export const statisticsPage = {
         rType.render('pie', byType, {
           onSegmentClick: ({ label }) => setFilterFromChart('type', label),
         });
+        if (rCert) {
+          rCert.render('pie', certBreakdown(), {
+            onSegmentClick: ({ label }) => setFilterFromChart('certified', label),
+          });
+        }
         rCat.render('horizontalBar', byPipeline, {
           onSegmentClick: ({ label }) => setFilterFromChart('catalog', label),
         });
@@ -521,6 +558,7 @@ export const statisticsPage = {
 function renderSummary(s) {
   const items = [
     ['Total objects', s.total_objects],
+    ['Certified objects', s.certified_objects],
     ['Total edges', s.total_edges],
     ['Distinct types', s.distinct_types],
     ['Distinct catalogs', s.distinct_pipelines],
