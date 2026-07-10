@@ -582,6 +582,7 @@ function renderPopover(node, exploreUrlFor) {
   const rowDefs = [['Type', escapeHtml(node.type || '—')]];
   // Only surface certification when the object is actually certified.
   if (certified) rowDefs.push(['Certified', certifiedBadge(true)]);
+  rowDefs.push(...objectMetricFieldRows(node.data));
   const rows = rowDefs
     .map(
       ([k, v]) => `<div class="row"><span class="k">${escapeHtml(k)}</span><span class="v">${v}</span></div>`
@@ -619,6 +620,31 @@ function certifiedBadge(certified) {
     : '<span class="cert-badge cert-badge--no" title="Not certified">Not certified</span>';
 }
 
+/** @param {Record<string, unknown>|null|undefined} data */
+function objectMetricFieldRows(data) {
+  if (!data) return [];
+  /** @type {[string, string][]} */
+  const rows = [];
+  if (data.number_of_columns != null) {
+    rows.push(['Columns', escapeHtml(Number(data.number_of_columns).toLocaleString())]);
+  }
+  if (data.has_filter != null) {
+    rows.push(['Has filter', data.has_filter
+      ? '<span class="cert-badge cert-badge--yes">Yes</span>'
+      : '<span class="cert-badge cert-badge--no">No</span>']);
+  }
+  if (data.number_of_CTE != null) {
+    rows.push(['CTEs', escapeHtml(Number(data.number_of_CTE).toLocaleString())]);
+  }
+  if (data.number_of_select != null) {
+    rows.push(['SELECTs', escapeHtml(Number(data.number_of_select).toLocaleString())]);
+  }
+  if (data.size != null) {
+    rows.push(['Size', escapeHtml(Number(data.size).toLocaleString())]);
+  }
+  return rows;
+}
+
 function renderNodeDetails(node, exploreUrlFor) {
   const name = node.label || node.id;
   const url = exploreUrlFor(name);
@@ -629,6 +655,7 @@ function renderNodeDetails(node, exploreUrlFor) {
   ];
   // Only surface certification when the object is actually certified.
   if (certified) fields.push(['Certified', certifiedBadge(true)]);
+  fields.push(...objectMetricFieldRows(node.data));
   const rows = fields
     .map(
       ([k, v]) => `

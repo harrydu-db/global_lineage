@@ -34,7 +34,42 @@ export async function listInputLineageFiles() {
   }
 }
 
-/** @typedef {{ object_full_name: string, object_type?: string|null, upstream_objects?: string[], certified?: boolean }} UnifiedRow */
+/** @typedef {{ object_full_name: string, object_type?: string|null, upstream_objects?: string[], certified?: boolean, number_of_columns?: number|null, has_filter?: boolean|null, number_of_CTE?: number|null, number_of_select?: number|null, size?: number|null }} UnifiedRow */
+
+/** @typedef {{ number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }} ObjectMetrics */
+
+/**
+ * @param {UnifiedRow} row
+ * @returns {ObjectMetrics}
+ */
+function parseObjectMetrics(row) {
+  return {
+    number_of_columns: row.number_of_columns != null && Number.isFinite(Number(row.number_of_columns))
+      ? Number(row.number_of_columns)
+      : null,
+    has_filter: row.has_filter != null ? Boolean(row.has_filter) : null,
+    number_of_CTE: row.number_of_CTE != null && Number.isFinite(Number(row.number_of_CTE))
+      ? Number(row.number_of_CTE)
+      : null,
+    number_of_select: row.number_of_select != null && Number.isFinite(Number(row.number_of_select))
+      ? Number(row.number_of_select)
+      : null,
+    size: row.size != null && Number.isFinite(Number(row.size))
+      ? Number(row.size)
+      : null,
+  };
+}
+
+/** @param {ObjectMetrics} metrics */
+function emptyObjectMetrics() {
+  return {
+    number_of_columns: null,
+    has_filter: null,
+    number_of_CTE: null,
+    number_of_select: null,
+    size: null,
+  };
+}
 
 let loadPromise = null;
 /** URL used for the last fetch-based load; empty after an in-memory upload until reset. */
@@ -131,6 +166,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
   const objectTypes = new Map();
   /** @type {Set<string>} Objects carrying `"certified": true` in the source JSON. */
   const certifiedNames = new Set();
+  /** @type {Map<string, ObjectMetrics>} */
+  const objectMetrics = new Map();
   /** @type {Map<string, Set<string>>} */
   const downstream = new Map();
   /** @type {Map<string, Set<string>>} */
@@ -143,6 +180,7 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
     const target = row.object_full_name;
     allNames.add(target);
     objectTypes.set(target, row.object_type ?? null);
+    objectMetrics.set(target, parseObjectMetrics(row));
     if (row.certified === true) certifiedNames.add(target);
     const ups = Array.isArray(row.upstream_objects) ? row.upstream_objects : [];
     for (const source of ups) {
@@ -216,12 +254,16 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
     return out;
   }
 
+  function metricsFor(id) {
+    return objectMetrics.get(id) ?? emptyObjectMetrics();
+  }
+
   function toGraphNodes(ids) {
     return [...ids].sort().map((id) => ({
       id,
       label: id,
       type: objectTypes.get(id) ?? null,
-      data: { certified: isCertified(id) },
+      data: { certified: isCertified(id), ...metricsFor(id) },
     }));
   }
 
@@ -387,8 +429,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
 
   /**
    * Rows for the statistics table. Filters are combined with AND when multiple are set.
-   * @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null }} filter
-   * @returns {{ object_full_name: string, object_type: string|null, certified: boolean, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], longest_upstream_depth: number, longest_downstream_depth: number, longest_upstream_path: string[], longest_downstream_path: string[] }[]}
+   * @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null, has_filter?: boolean|null, number_of_columns_min?: number|null, number_of_columns_max?: number|null, number_of_CTE_min?: number|null, number_of_CTE_max?: number|null, number_of_select_min?: number|null, number_of_select_max?: number|null, size_min?: number|null, size_max?: number|null }} filter
+   * @returns {{ object_full_name: string, object_type: string|null, certified: boolean, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], longest_upstream_depth: number, longest_downstream_depth: number, longest_upstream_path: string[], longest_downstream_path: string[], number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }[]}
    */
   function listObjectsForStats(filter = {}) {
     const typeEq = filter.object_type != null && filter.object_type !== '' ? String(filter.object_type) : null;
@@ -397,6 +439,17 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
     const nameEq = filter.object_full_name != null && filter.object_full_name !== ''
       ? String(filter.object_full_name)
       : null;
+    const hasFilterEq = filter.has_filter != null && filter.has_filter !== '' ? Boolean(filter.has_filter) : null;
+    const numBounds = [
+      ['number_of_columns', filter.number_of_columns_min, filter.number_of_columns_max],
+      ['number_of_CTE', filter.number_of_CTE_min, filter.number_of_CTE_max],
+      ['number_of_select', filter.number_of_select_min, filter.number_of_select_max],
+      ['size', filter.size_min, filter.size_max],
+    ].map(([key, minRaw, maxRaw]) => {
+      const min = minRaw != null && minRaw !== '' && Number.isFinite(Number(minRaw)) ? Number(minRaw) : null;
+      const max = maxRaw != null && maxRaw !== '' && Number.isFinite(Number(maxRaw)) ? Number(maxRaw) : null;
+      return { key, min, max };
+    });
 
     let names = sortedNames;
     if (nameEq) {
@@ -414,12 +467,26 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
           return schema === schemaEq;
         });
       }
+      if (hasFilterEq != null) {
+        names = names.filter((n) => metricsFor(n).has_filter === hasFilterEq);
+      }
+      for (const { key, min, max } of numBounds) {
+        if (min == null && max == null) continue;
+        names = names.filter((n) => {
+          const value = metricsFor(n)[/** @type {keyof ObjectMetrics} */ (key)];
+          if (value == null) return false;
+          if (min != null && value < min) return false;
+          if (max != null && value > max) return false;
+          return true;
+        });
+      }
     }
 
     return names.map((object_full_name) => {
       const { catalog, schema } = parseNameParts(object_full_name);
       const upstream_objects = [...(upstream.get(object_full_name) || [])].sort();
       const downstream_objects = [...(downstream.get(object_full_name) || [])].sort();
+      const metrics = metricsFor(object_full_name);
       return {
         object_full_name,
         object_type: objectTypes.get(object_full_name) ?? null,
@@ -434,6 +501,7 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
         longest_downstream_depth: longestDownstreamDepthMap.get(object_full_name) || 0,
         longest_upstream_path: reconstructPath(object_full_name, longestUpstreamNextMap),
         longest_downstream_path: reconstructPath(object_full_name, longestDownstreamNextMap),
+        ...metrics,
       };
     });
   }
@@ -453,6 +521,7 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
       certified: isCertified(fullName),
       upstream_objects: [...(upstream.get(fullName) || [])].sort(),
       downstream_objects: [...(downstream.get(fullName) || [])].sort(),
+      ...metricsFor(fullName),
     };
   }
 

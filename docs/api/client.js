@@ -84,7 +84,7 @@ export const api = {
       const store = await getUnifiedLineageStore();
       return store.statsTopDownstream(n);
     },
-    /** @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null }} [filter] */
+    /** @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null, has_filter?: boolean|null, number_of_columns_min?: number|null, number_of_columns_max?: number|null, number_of_CTE_min?: number|null, number_of_CTE_max?: number|null, number_of_select_min?: number|null, number_of_select_max?: number|null, size_min?: number|null, size_max?: number|null }} [filter] */
     listObjects: async (filter = {}) => {
       const store = await getUnifiedLineageStore();
       return store.listObjectsForStats(filter);

@@ -603,6 +603,23 @@ html, body {
   cursor: not-allowed;
 }
 
+.stats-filter-input {
+  width: 88px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.stats-table-metric-filters {
+  width: 100%;
+}
+
 .stats-table-head h2 {
   margin: 0;
   font-size: 15px;
@@ -630,6 +647,33 @@ html, body {
 .stats-table-clear:hover {
   filter: brightness(1.1);
   border-color: var(--text-dim);
+}
+
+.stats-table-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.stats-table-download {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.stats-table-download:hover:not(:disabled) {
+  filter: brightness(1.1);
+  border-color: var(--text-dim);
+}
+
+.stats-table-download:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .stats-table-hint {
@@ -675,6 +719,57 @@ html, body {
   cursor: pointer;
   user-select: none;
   position: relative;
+}
+
+/* Column resize handle on the right edge of each header cell. */
+.stats-col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 3;
+}
+
+.stats-col-resizer::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  right: 3px;
+  width: 2px;
+  height: 60%;
+  background: var(--border);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.stats-col-resizer:hover::before {
+  opacity: 1;
+  background: var(--accent);
+}
+
+body.stats-col-resizing,
+body.stats-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* Once a resize begins the table switches to a fixed layout; let columns
+   grow past the default object-name cap so drags feel unconstrained. */
+.stats-table--resizable {
+  table-layout: fixed;
+}
+
+.stats-table--resizable .cell-name {
+  max-width: none;
+}
+
+.stats-table--resizable td {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stats-table thead th.stats-sortable {
