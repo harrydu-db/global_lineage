@@ -7,6 +7,8 @@
 
 import { api } from '../api/client.js';
 import { GLOBAL_LINEAGE_THEME_EVENT } from '../lib/theme.js';
+import { clearStatsFilterState, loadStatsFilterState, saveStatsFilterState } from '../lib/stats-filter-state.js';
+import { createCheckboxDropdown } from '../lib/checkbox-dropdown.js';
 import { createChartJsRenderer as createChartRenderer } from '../renderers/chart/chartjs-renderer.js';
 
 export const statisticsPage = {
@@ -27,15 +29,11 @@ export const statisticsPage = {
             <div class="stats-table-filters" role="group" aria-label="Catalog and schema">
               <label class="stats-filter-field">
                 <span>Catalog</span>
-                <select id="filter-catalog" class="stats-filter-select">
-                  <option value="">All catalogs</option>
-                </select>
+                <div id="filter-catalog"></div>
               </label>
               <label class="stats-filter-field">
                 <span>Schema</span>
-                <select id="filter-schema" class="stats-filter-select" disabled>
-                  <option value="">All schemas</option>
-                </select>
+                <div id="filter-schema"></div>
               </label>
               <div class="stats-table-actions">
                 <button type="button" id="clear-table-filter" class="stats-table-clear" hidden>Clear filter</button>
@@ -77,6 +75,14 @@ export const statisticsPage = {
                 <input type="number" id="filter-select-max" class="stats-filter-input" min="0" step="1" placeholder="Any">
               </label>
               <label class="stats-filter-field">
+                <span>Upstream min</span>
+                <input type="number" id="filter-upstream-min" class="stats-filter-input" min="0" step="1" placeholder="Any">
+              </label>
+              <label class="stats-filter-field">
+                <span>Upstream max</span>
+                <input type="number" id="filter-upstream-max" class="stats-filter-input" min="0" step="1" placeholder="Any">
+              </label>
+              <label class="stats-filter-field">
                 <span>Size min</span>
                 <input type="number" id="filter-size-min" class="stats-filter-input" min="0" step="1" placeholder="Any">
               </label>
@@ -90,22 +96,38 @@ export const statisticsPage = {
           <p class="stats-table-hint">Use the menus to filter by catalog, schema, and object metrics. Charts also narrow the table (type, catalog, or a single object). Click column headers to sort.</p>
           <div class="stats-table-wrap">
             <table class="stats-table" id="object-table">
+              <colgroup>
+                <col class="col-object" />
+                <col class="col-type" />
+                <col class="col-certified" />
+                <col class="col-catalog" />
+                <col class="col-schema" />
+                <col class="col-num col-upstream" />
+                <col class="col-num col-downstream" />
+                <col class="col-num col-longest-up" />
+                <col class="col-num col-longest-down" />
+                <col class="col-num col-columns" />
+                <col class="col-num col-has-filter" />
+                <col class="col-num col-cte" />
+                <col class="col-num col-select" />
+                <col class="col-num col-size" />
+              </colgroup>
               <thead>
                 <tr>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="object_full_name" title="Sort by object">Object</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="object_type" title="Sort by type">Type</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="certified" title="Sort by certification">Certified</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="catalog" title="Sort by catalog">Catalog</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="schema" title="Sort by schema">Schema</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="upstream_count" title="Sort by upstream count">Upstream</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="downstream_count" title="Sort by downstream count">Downstream</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="longest_upstream_depth" title="Sort by longest upstream path depth">Longest upstream depth</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="longest_downstream_depth" title="Sort by longest downstream path depth">Longest downstream depth</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="number_of_columns" title="Sort by column count">Columns</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="has_filter" title="Sort by filter presence">Has filter</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="number_of_CTE" title="Sort by CTE count">CTEs</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="number_of_select" title="Sort by SELECT count">Selects</th>
-                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="size" title="Sort by definition size">Size</th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="object_full_name" data-label="Object"><span class="stats-th-label">Object</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="object_type" data-label="Type"><span class="stats-th-label">Type</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="certified" data-label="Certified"><span class="stats-th-label">Certified</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="catalog" data-label="Catalog"><span class="stats-th-label">Catalog</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="schema" data-label="Schema"><span class="stats-th-label">Schema</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="upstream_count" data-label="Upstream"><span class="stats-th-label">Upstream</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="downstream_count" data-label="Downstream"><span class="stats-th-label">Downstream</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="longest_upstream_depth" data-label="Longest upstream depth"><span class="stats-th-label">Longest upstream depth</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="longest_downstream_depth" data-label="Longest downstream depth"><span class="stats-th-label">Longest downstream depth</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="number_of_columns" data-label="Columns"><span class="stats-th-label">Columns</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable" data-sort-key="has_filter" data-label="Has filter"><span class="stats-th-label">Has filter</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="number_of_CTE" data-label="CTEs"><span class="stats-th-label">CTEs</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="number_of_select" data-label="Selects"><span class="stats-th-label">Selects</span></th>
+                  <th scope="col" tabindex="0" role="columnheader" class="stats-sortable num" data-sort-key="size" data-label="Size"><span class="stats-th-label">Size</span></th>
                 </tr>
               </thead>
               <tbody id="object-table-body"></tbody>
@@ -135,8 +157,19 @@ export const statisticsPage = {
     const clearFilterBtn = root.querySelector('#clear-table-filter');
     const downloadCsvBtn = root.querySelector('#download-table-csv');
     const downloadXlsxBtn = root.querySelector('#download-table-xlsx');
-    const catalogSelect = root.querySelector('#filter-catalog');
-    const schemaSelect = root.querySelector('#filter-schema');
+    const catalogSelectRoot = root.querySelector('#filter-catalog');
+    const schemaSelectRoot = root.querySelector('#filter-schema');
+
+    const catalogDropdown = createCheckboxDropdown(catalogSelectRoot, {
+      placeholder: 'All catalogs',
+      allLabel: 'All catalogs',
+      ariaLabel: 'Filter by catalog',
+    });
+    const schemaDropdown = createCheckboxDropdown(schemaSelectRoot, {
+      placeholder: 'All schemas',
+      allLabel: 'All schemas',
+      ariaLabel: 'Filter by schema',
+    });
     const colsMinInput = root.querySelector('#filter-cols-min');
     const colsMaxInput = root.querySelector('#filter-cols-max');
     const hasFilterSelect = root.querySelector('#filter-has-filter');
@@ -146,6 +179,8 @@ export const statisticsPage = {
     const selectMaxInput = root.querySelector('#filter-select-max');
     const sizeMinInput = root.querySelector('#filter-size-min');
     const sizeMaxInput = root.querySelector('#filter-size-max');
+    const upstreamMinInput = root.querySelector('#filter-upstream-min');
+    const upstreamMaxInput = root.querySelector('#filter-upstream-max');
     const listModal = root.querySelector('#stats-list-modal');
     const listModalTitle = root.querySelector('#stats-list-modal-title');
     const listModalList = root.querySelector('#stats-list-modal-list');
@@ -155,7 +190,7 @@ export const statisticsPage = {
 
     const renderers = [];
 
-    /** @type {{ object_type?: string, catalog?: string, schema?: string, object_full_name?: string, certified?: boolean, has_filter?: boolean, number_of_columns_min?: number, number_of_columns_max?: number, number_of_CTE_min?: number, number_of_CTE_max?: number, number_of_select_min?: number, number_of_select_max?: number, size_min?: number, size_max?: number } | null} */
+    /** @type {{ object_type?: string, catalogs?: string[], schemas?: string[], object_full_name?: string, certified?: boolean, has_filter?: boolean, number_of_columns_min?: number, number_of_columns_max?: number, number_of_CTE_min?: number, number_of_CTE_max?: number, number_of_select_min?: number, number_of_select_max?: number, size_min?: number, size_max?: number, upstream_count_min?: number, upstream_count_max?: number } | null} */
     let tableFilter = null;
     /** @type {{ object_full_name: string, object_type: string|null, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }[]} */
     let allTableRows = [];
@@ -228,6 +263,35 @@ export const statisticsPage = {
       });
     }
 
+    function syncHeaderTooltips() {
+      if (!theadEl) return;
+      theadEl.querySelectorAll('th[data-sort-key]').forEach((th) => {
+        const labelEl = th.querySelector('.stats-th-label');
+        const label = th.getAttribute('data-label') || labelEl?.textContent?.trim() || '';
+        const measureEl = labelEl || th;
+        const truncated = measureEl.scrollHeight > measureEl.clientHeight + 1
+          || measureEl.scrollWidth > measureEl.clientWidth + 1;
+        if (truncated && label) th.setAttribute('title', label);
+        else th.removeAttribute('title');
+      });
+    }
+
+    function setupHeaderTooltips() {
+      syncHeaderTooltips();
+      const wrap = tableEl?.parentElement;
+      /** @type {ResizeObserver | null} */
+      let ro = null;
+      if (wrap && typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(() => syncHeaderTooltips());
+        ro.observe(wrap);
+      }
+      window.addEventListener('resize', syncHeaderTooltips);
+      return () => {
+        if (ro) ro.disconnect();
+        window.removeEventListener('resize', syncHeaderTooltips);
+      };
+    }
+
     // Set true while a column resize drag is in progress so the ensuing
     // click on the header does not also trigger a sort.
     let suppressNextHeadClick = false;
@@ -283,6 +347,8 @@ export const statisticsPage = {
         number_of_select_max: parseNumberInput(selectMaxInput),
         size_min: parseNumberInput(sizeMinInput),
         size_max: parseNumberInput(sizeMaxInput),
+        upstream_count_min: parseNumberInput(upstreamMinInput),
+        upstream_count_max: parseNumberInput(upstreamMaxInput),
       };
     }
 
@@ -295,7 +361,9 @@ export const statisticsPage = {
         || metrics.number_of_select_min != null
         || metrics.number_of_select_max != null
         || metrics.size_min != null
-        || metrics.size_max != null;
+        || metrics.size_max != null
+        || metrics.upstream_count_min != null
+        || metrics.upstream_count_max != null;
     }
 
     function rowMatchesMetricFilters(row, metrics) {
@@ -305,6 +373,7 @@ export const statisticsPage = {
         ['number_of_CTE', metrics.number_of_CTE_min, metrics.number_of_CTE_max],
         ['number_of_select', metrics.number_of_select_min, metrics.number_of_select_max],
         ['size', metrics.size_min, metrics.size_max],
+        ['upstream_count', metrics.upstream_count_min, metrics.upstream_count_max],
       ];
       for (const [key, min, max] of bounds) {
         if (min == null && max == null) continue;
@@ -317,10 +386,77 @@ export const statisticsPage = {
     }
 
     function clearMetricFilterInputs() {
-      for (const input of [colsMinInput, colsMaxInput, cteMinInput, cteMaxInput, selectMinInput, selectMaxInput, sizeMinInput, sizeMaxInput]) {
+      for (const input of [colsMinInput, colsMaxInput, cteMinInput, cteMaxInput, selectMinInput, selectMaxInput, sizeMinInput, sizeMaxInput, upstreamMinInput, upstreamMaxInput]) {
         if (input) input.value = '';
       }
       if (hasFilterSelect) hasFilterSelect.value = '';
+    }
+
+    function selectedCatalogs() {
+      return catalogDropdown.getSelected();
+    }
+
+    function selectedSchemas() {
+      return schemaDropdown.getSelected();
+    }
+
+    function normalizeCatalogSchemaFilter(filter) {
+      if (!filter) return null;
+      const next = { ...filter };
+      if (next.catalog && !next.catalogs) {
+        next.catalogs = [next.catalog];
+        delete next.catalog;
+      }
+      if (next.schema && !next.schemas) {
+        next.schemas = [next.schema];
+        delete next.schema;
+      }
+      if (Array.isArray(next.catalogs)) {
+        next.catalogs = next.catalogs.filter((v) => v != null && v !== '');
+        if (!next.catalogs.length) delete next.catalogs;
+      }
+      if (Array.isArray(next.schemas)) {
+        next.schemas = next.schemas.filter((v) => v != null && v !== '');
+        if (!next.schemas.length) delete next.schemas;
+      }
+      return Object.keys(next).length ? next : null;
+    }
+
+    function activeCatalogFilter() {
+      if (catalogDropdown.isAllSelected()) return null;
+      const catalogs = selectedCatalogs();
+      return catalogs.length ? catalogs : null;
+    }
+
+    function activeSchemaFilter() {
+      if (schemaDropdown.isAllSelected()) return null;
+      const schemas = selectedSchemas();
+      return schemas.length ? schemas : null;
+    }
+
+    function syncTableFilterFromSelects() {
+      const prev = tableFilter && !tableFilter.object_full_name ? { ...tableFilter } : {};
+      delete prev.object_full_name;
+      delete prev.catalog;
+      delete prev.schema;
+      const catalogs = activeCatalogFilter();
+      const schemas = activeSchemaFilter();
+      if (catalogs) prev.catalogs = catalogs;
+      else delete prev.catalogs;
+      if (schemas) prev.schemas = schemas;
+      else delete prev.schemas;
+      tableFilter = Object.keys(prev).length ? prev : null;
+    }
+
+    function persistFilterState() {
+      saveStatsFilterState({
+        tableFilter,
+        selectedCatalogs: selectedCatalogs(),
+        selectedSchemas: selectedSchemas(),
+        metrics: readMetricFilters(),
+        sortKey,
+        sortDir,
+      });
     }
 
     function uniqueSorted(values) {
@@ -328,31 +464,31 @@ export const statisticsPage = {
     }
 
     function refillCatalogOptions() {
-      const keep = catalogSelect.value || tableFilter?.catalog || '';
+      const keep = selectedCatalogs();
       const catalogs = uniqueSorted(allTableRows.map((r) => r.catalog));
-      catalogSelect.innerHTML = '<option value="">All catalogs</option>'
-        + catalogs.map((c) => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
-      if (keep && catalogs.includes(keep)) catalogSelect.value = keep;
-      else if (tableFilter?.catalog && catalogs.includes(tableFilter.catalog)) {
-        catalogSelect.value = tableFilter.catalog;
+      catalogDropdown.setOptions(catalogs);
+      const valid = keep.filter((c) => catalogs.includes(c));
+      if (valid.length) catalogDropdown.setSelected(valid);
+      else if (tableFilter?.catalogs?.length) {
+        catalogDropdown.setSelected(tableFilter.catalogs.filter((c) => catalogs.includes(c)));
+      } else if (!catalogDropdown.getSelected().length) {
+        catalogDropdown.selectAll();
       }
     }
 
     function refillSchemaOptions() {
-      const cat = catalogSelect.value || '';
+      const cats = activeCatalogFilter() || [];
+      const keep = selectedSchemas();
       const schemas = uniqueSorted(
-        allTableRows.filter((r) => !cat || r.catalog === cat).map((r) => r.schema)
+        allTableRows
+          .filter((r) => !cats.length || cats.includes(r.catalog))
+          .map((r) => r.schema)
       );
-      schemaSelect.innerHTML = '<option value="">All schemas</option>'
-        + schemas.map((s) => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`).join('');
-      schemaSelect.disabled = !cat;
-      if (!cat) {
-        schemaSelect.value = '';
-        return;
-      }
-      const prefer = tableFilter?.schema;
-      if (prefer && schemas.includes(prefer)) schemaSelect.value = prefer;
-      else schemaSelect.value = '';
+      schemaDropdown.setOptions(schemas);
+      const prefer = tableFilter?.schemas?.length ? tableFilter.schemas : keep;
+      const valid = prefer.filter((s) => schemas.includes(s));
+      if (valid.length) schemaDropdown.setSelected(valid);
+      else if (!schemaDropdown.getSelected().length) schemaDropdown.selectAll();
     }
 
     function filterSummary() {
@@ -361,8 +497,8 @@ export const statisticsPage = {
       const hasChartFilter = tableFilter && (
         tableFilter.object_full_name
         || tableFilter.object_type
-        || tableFilter.catalog
-        || tableFilter.schema
+        || (tableFilter.catalogs && tableFilter.catalogs.length)
+        || (tableFilter.schemas && tableFilter.schemas.length)
         || tableFilter.certified !== undefined
       );
       if (!hasChartFilter && !hasMetrics) return '';
@@ -372,8 +508,8 @@ export const statisticsPage = {
       } else if (tableFilter) {
         if (tableFilter.object_type) parts.push(`type = ${tableFilter.object_type}`);
         if (tableFilter.certified !== undefined) parts.push(`certified = ${tableFilter.certified ? 'yes' : 'no'}`);
-        if (tableFilter.catalog) parts.push(`catalog = ${tableFilter.catalog}`);
-        if (tableFilter.schema) parts.push(`schema = ${tableFilter.schema}`);
+        if (tableFilter.catalogs?.length) parts.push(`catalog = ${tableFilter.catalogs.join(', ')}`);
+        if (tableFilter.schemas?.length) parts.push(`schema = ${tableFilter.schemas.join(', ')}`);
       }
       if (metrics.number_of_columns_min != null || metrics.number_of_columns_max != null) {
         parts.push(`columns ${formatRange(metrics.number_of_columns_min, metrics.number_of_columns_max)}`);
@@ -384,6 +520,9 @@ export const statisticsPage = {
       }
       if (metrics.number_of_select_min != null || metrics.number_of_select_max != null) {
         parts.push(`selects ${formatRange(metrics.number_of_select_min, metrics.number_of_select_max)}`);
+      }
+      if (metrics.upstream_count_min != null || metrics.upstream_count_max != null) {
+        parts.push(`upstream ${formatRange(metrics.upstream_count_min, metrics.upstream_count_max)}`);
       }
       if (metrics.size_min != null || metrics.size_max != null) {
         parts.push(`size ${formatRange(metrics.size_min, metrics.size_max)}`);
@@ -401,27 +540,27 @@ export const statisticsPage = {
     function setFilterFromChart(source, label) {
       if (source === 'object') {
         tableFilter = { object_full_name: label };
-        catalogSelect.value = '';
-        schemaSelect.value = '';
+        catalogDropdown.setSelected([]);
+        schemaDropdown.setSelected([]);
         refillSchemaOptions();
         applyTableFilter();
         return;
       }
       const prev = tableFilter && !tableFilter.object_full_name ? { ...tableFilter } : {};
       delete prev.object_full_name;
+      delete prev.catalog;
+      delete prev.schema;
       if (source === 'certified') {
         prev.certified = label === 'Certified';
-        catalogSelect.value = prev.catalog || '';
       }
       if (source === 'type') {
         prev.object_type = label;
-        catalogSelect.value = prev.catalog || '';
       }
       if (source === 'catalog') {
-        prev.catalog = label;
-        catalogSelect.value = label;
-        delete prev.schema;
-        schemaSelect.value = '';
+        prev.catalogs = [label];
+        delete prev.schemas;
+        catalogDropdown.setSelected([label]);
+        schemaDropdown.setSelected([]);
       }
       tableFilter = Object.keys(prev).length ? prev : null;
       refillSchemaOptions();
@@ -430,15 +569,21 @@ export const statisticsPage = {
 
     function applyTableFilter() {
       const metrics = readMetricFilters();
-      const spec = tableFilter && (tableFilter.object_full_name || tableFilter.object_type || tableFilter.catalog || tableFilter.schema || tableFilter.certified !== undefined)
+      const spec = tableFilter && (
+        tableFilter.object_full_name
+        || tableFilter.object_type
+        || (tableFilter.catalogs && tableFilter.catalogs.length)
+        || (tableFilter.schemas && tableFilter.schemas.length)
+        || tableFilter.certified !== undefined
+      )
         ? tableFilter
         : {};
       const rows = allTableRows.filter((r) => {
         if (spec.object_full_name) return r.object_full_name === spec.object_full_name;
         if (spec.object_type && (r.object_type ?? 'Unknown') !== spec.object_type) return false;
         if (spec.certified !== undefined && Boolean(r.certified) !== spec.certified) return false;
-        if (spec.catalog && r.catalog !== spec.catalog) return false;
-        if (spec.schema && r.schema !== spec.schema) return false;
+        if (spec.catalogs?.length && !spec.catalogs.includes(r.catalog)) return false;
+        if (spec.schemas?.length && !spec.schemas.includes(r.schema)) return false;
         if (!rowMatchesMetricFilters(r, metrics)) return false;
         return true;
       });
@@ -459,6 +604,62 @@ export const statisticsPage = {
       const hasRows = sorted.length > 0;
       if (downloadCsvBtn) downloadCsvBtn.disabled = !hasRows;
       if (downloadXlsxBtn) downloadXlsxBtn.disabled = !hasRows;
+      persistFilterState();
+    }
+
+    function restoreFilterState() {
+      const saved = loadStatsFilterState();
+      if (!saved) return;
+
+      tableFilter = normalizeCatalogSchemaFilter(saved.tableFilter);
+
+      if (typeof saved.sortKey === 'string') sortKey = saved.sortKey;
+      if (saved.sortDir === 'asc' || saved.sortDir === 'desc') sortDir = saved.sortDir;
+
+      refillCatalogOptions();
+
+      if (tableFilter?.object_full_name) {
+        catalogDropdown.setSelected([]);
+        schemaDropdown.setSelected([]);
+      } else {
+        if (Array.isArray(saved.selectedCatalogs) && saved.selectedCatalogs.length) {
+          catalogDropdown.setSelected(saved.selectedCatalogs);
+        } else if (tableFilter?.catalogs?.length) {
+          catalogDropdown.setSelected(tableFilter.catalogs);
+        }
+
+        refillSchemaOptions();
+
+        if (Array.isArray(saved.selectedSchemas) && saved.selectedSchemas.length) {
+          schemaDropdown.setSelected(saved.selectedSchemas);
+        } else if (tableFilter?.schemas?.length) {
+          schemaDropdown.setSelected(tableFilter.schemas);
+        }
+
+        syncTableFilterFromSelects();
+      }
+
+      refillSchemaOptions();
+
+      const metrics = saved.metrics && typeof saved.metrics === 'object' ? saved.metrics : {};
+      const setNum = (el, key) => {
+        if (!el) return;
+        const v = metrics[key];
+        el.value = v != null && v !== '' ? String(v) : '';
+      };
+      setNum(colsMinInput, 'number_of_columns_min');
+      setNum(colsMaxInput, 'number_of_columns_max');
+      setNum(cteMinInput, 'number_of_CTE_min');
+      setNum(cteMaxInput, 'number_of_CTE_max');
+      setNum(selectMinInput, 'number_of_select_min');
+      setNum(selectMaxInput, 'number_of_select_max');
+      setNum(sizeMinInput, 'size_min');
+      setNum(sizeMaxInput, 'size_max');
+      setNum(upstreamMinInput, 'upstream_count_min');
+      setNum(upstreamMaxInput, 'upstream_count_max');
+      if (hasFilterSelect && metrics.has_filter != null) {
+        hasFilterSelect.value = metrics.has_filter ? '1' : '0';
+      }
     }
 
     function renderTableBody(rows) {
@@ -585,60 +786,96 @@ export const statisticsPage = {
       closeStatsListModal();
     }
 
-    // Column resizing: drag the handle on a header's right edge. The first
-    // drag freezes all current column widths and switches to a fixed layout
-    // so subsequent drags resize precisely without reflowing siblings.
+    // Column resizing: drag the handle on a header's right edge. Only the
+    // dragged border moves — the column to its left grows/shrinks and the
+    // column to its right changes by the opposite amount so every other
+    // border stays put. Widths are set on <col> elements because the table
+    // uses table-layout: fixed with a <colgroup>, where <col> widths win
+    // over per-<th> widths.
     function setupColumnResizing() {
       if (!theadEl || !tableEl) return () => {};
       const headerRow = theadEl.querySelector('tr');
       if (!headerRow) return () => {};
-      const ths = Array.from(headerRow.querySelectorAll('th'));
-      let activeTh = null;
+      const ths = /** @type {HTMLTableCellElement[]} */ (Array.from(headerRow.querySelectorAll('th')));
+      const cols = /** @type {HTMLTableColElement[]} */ (Array.from(tableEl.querySelectorAll('colgroup > col')));
+
+      /** @type {number | null} */
+      let activeIdx = null;
       let startX = 0;
       let startWidth = 0;
+      let neighborStartWidth = 0;
+      let hasNeighbor = false;
       let layoutFrozen = false;
+
+      const MIN_COL_WIDTH = 40;
 
       function freezeWidths() {
         const widths = ths.map((th) => th.getBoundingClientRect().width);
-        const total = widths.reduce((a, b) => a + b, 0);
-        ths.forEach((th, i) => { th.style.width = `${Math.round(widths[i])}px`; });
+        const totalTh = widths.reduce((a, b) => a + b, 0);
+        const tableWidth = tableEl.getBoundingClientRect().width || totalTh;
+        cols.forEach((col, i) => {
+          col.style.width = `${Math.round(widths[i])}px`;
+        });
         tableEl.style.tableLayout = 'fixed';
-        tableEl.style.width = `${Math.round(total)}px`;
+        tableEl.style.width = `${Math.round(tableWidth)}px`;
         tableEl.classList.add('stats-table--resizable');
         layoutFrozen = true;
       }
 
       function onPointerMove(e) {
-        if (!activeTh) return;
+        if (activeIdx == null) return;
         suppressNextHeadClick = true;
         const dx = e.clientX - startX;
-        const w = Math.max(56, startWidth + dx);
-        activeTh.style.width = `${Math.round(w)}px`;
-        const total = ths.reduce((sum, th) => sum + th.getBoundingClientRect().width, 0);
-        tableEl.style.width = `${Math.round(total)}px`;
+        let activeW = startWidth + dx;
+
+        if (hasNeighbor) {
+          let neighborW = neighborStartWidth - dx;
+          if (activeW < MIN_COL_WIDTH) {
+            activeW = MIN_COL_WIDTH;
+            neighborW = neighborStartWidth + (startWidth - MIN_COL_WIDTH);
+          }
+          if (neighborW < MIN_COL_WIDTH) {
+            neighborW = MIN_COL_WIDTH;
+            activeW = startWidth + (neighborStartWidth - MIN_COL_WIDTH);
+          }
+          cols[activeIdx].style.width = `${Math.round(activeW)}px`;
+          cols[activeIdx + 1].style.width = `${Math.round(neighborW)}px`;
+        } else {
+          activeW = Math.max(MIN_COL_WIDTH, activeW);
+          cols[activeIdx].style.width = `${Math.round(activeW)}px`;
+          tableEl.style.width = `${Math.round(tableEl.getBoundingClientRect().width + (activeW - startWidth))}px`;
+          startWidth = activeW;
+          startX = e.clientX;
+        }
       }
 
       function onPointerUp() {
-        if (!activeTh) return;
-        activeTh = null;
+        if (activeIdx == null) return;
+        activeIdx = null;
         document.body.classList.remove('stats-col-resizing');
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
-        // Clear any lingering click suppression once the click has fired.
-        setTimeout(() => { suppressNextHeadClick = false; }, 0);
+        setTimeout(() => {
+          suppressNextHeadClick = false;
+          syncHeaderTooltips();
+        }, 0);
       }
 
       function onPointerDown(e) {
         const handle = e.target.closest('.stats-col-resizer');
         if (!handle) return;
-        const th = handle.parentElement;
+        const th = /** @type {HTMLTableCellElement | null} */ (handle.parentElement);
         if (!th) return;
+        const idx = ths.indexOf(th);
+        if (idx < 0 || !cols[idx]) return;
         e.preventDefault();
         e.stopPropagation();
         if (!layoutFrozen) freezeWidths();
-        activeTh = th;
+        activeIdx = idx;
+        hasNeighbor = idx < cols.length - 1;
         startX = e.clientX;
         startWidth = th.getBoundingClientRect().width;
+        neighborStartWidth = hasNeighbor ? ths[idx + 1].getBoundingClientRect().width : 0;
         suppressNextHeadClick = true;
         document.body.classList.add('stats-col-resizing');
         window.addEventListener('pointermove', onPointerMove);
@@ -667,6 +904,7 @@ export const statisticsPage = {
       theadEl.addEventListener('keydown', onTableHeadKeydown);
     }
     const teardownColumnResizing = setupColumnResizing();
+    const teardownHeaderTooltips = setupHeaderTooltips();
     listModal.addEventListener('click', onListModalClick);
     document.addEventListener('keydown', onDocKeydown);
 
@@ -686,37 +924,24 @@ export const statisticsPage = {
       return r;
     }
 
-    catalogSelect.addEventListener('change', () => {
-      const v = catalogSelect.value;
-      const prev = tableFilter && !tableFilter.object_full_name ? { ...tableFilter } : {};
-      delete prev.object_full_name;
-      if (v) prev.catalog = v;
-      else delete prev.catalog;
-      delete prev.schema;
-      schemaSelect.value = '';
-      tableFilter = Object.keys(prev).length ? prev : null;
+    catalogDropdown.onChange(() => {
+      syncTableFilterFromSelects();
       refillSchemaOptions();
       applyTableFilter();
     });
 
-    schemaSelect.addEventListener('change', () => {
-      if (!catalogSelect.value) return;
-      const prev = tableFilter && !tableFilter.object_full_name ? { ...tableFilter } : {};
-      delete prev.object_full_name;
-      prev.catalog = catalogSelect.value;
-      const s = schemaSelect.value;
-      if (s) prev.schema = s;
-      else delete prev.schema;
-      tableFilter = Object.keys(prev).length ? prev : null;
+    schemaDropdown.onChange(() => {
+      syncTableFilterFromSelects();
       applyTableFilter();
     });
 
     clearFilterBtn.addEventListener('click', () => {
       tableFilter = null;
-      catalogSelect.value = '';
-      schemaSelect.value = '';
+      catalogDropdown.selectAll();
+      schemaDropdown.selectAll();
       clearMetricFilterInputs();
       refillSchemaOptions();
+      clearStatsFilterState();
       applyTableFilter();
     });
 
@@ -742,7 +967,7 @@ export const statisticsPage = {
       applyTableFilter();
     }
 
-    for (const input of [colsMinInput, colsMaxInput, cteMinInput, cteMaxInput, selectMinInput, selectMaxInput, sizeMinInput, sizeMaxInput]) {
+    for (const input of [colsMinInput, colsMaxInput, cteMinInput, cteMaxInput, selectMinInput, selectMaxInput, sizeMinInput, sizeMaxInput, upstreamMinInput, upstreamMaxInput]) {
       if (input) input.addEventListener('change', onMetricFilterChange);
     }
     if (hasFilterSelect) hasFilterSelect.addEventListener('change', onMetricFilterChange);
@@ -759,6 +984,10 @@ export const statisticsPage = {
       allTableRows = tableRows;
       refillCatalogOptions();
       refillSchemaOptions();
+      restoreFilterState();
+      if (!catalogDropdown.getSelected().length) catalogDropdown.selectAll();
+      if (!schemaDropdown.getSelected().length) schemaDropdown.selectAll();
+      syncTableFilterFromSelects();
       summaryEl.innerHTML = renderSummary(summary);
 
       const certBreakdown = () => {
@@ -829,6 +1058,7 @@ export const statisticsPage = {
       };
 
       applyTableFilter();
+      requestAnimationFrame(syncHeaderTooltips);
       statusEl.textContent = 'loaded';
     } catch (e) {
       console.error(e);
@@ -843,6 +1073,9 @@ export const statisticsPage = {
         theadEl.removeEventListener('keydown', onTableHeadKeydown);
       }
       teardownColumnResizing();
+      teardownHeaderTooltips();
+      catalogDropdown.destroy();
+      schemaDropdown.destroy();
       tableBodyEl.removeEventListener('click', onTableBodyClick);
       listModal.removeEventListener('click', onListModalClick);
       document.removeEventListener('keydown', onDocKeydown);

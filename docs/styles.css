@@ -473,6 +473,7 @@ html, body {
 /* Statistics page layout */
 .stats-body {
   padding: 20px;
+  overflow-x: hidden;
   overflow-y: auto;
   height: calc(100% - 53px);
 }
@@ -553,6 +554,8 @@ html, body {
   margin-top: 28px;
   padding-top: 20px;
   border-top: 1px solid var(--border);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .stats-table-head {
@@ -596,6 +599,85 @@ html, body {
   font-size: 13px;
   text-transform: none;
   letter-spacing: normal;
+}
+
+.stats-checkbox-dropdown {
+  position: relative;
+  min-width: 160px;
+  max-width: 220px;
+}
+
+.stats-checkbox-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.stats-checkbox-dropdown-trigger::after {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--text-dim);
+  margin-left: auto;
+}
+
+.stats-checkbox-dropdown-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-checkbox-dropdown-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-width: 320px;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--surface, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 4px 0;
+}
+
+.stats-checkbox-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.stats-checkbox-dropdown-item:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.stats-checkbox-dropdown-item input[type='checkbox'] {
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.stats-checkbox-dropdown-item--all {
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
 }
 
 .stats-filter-select:disabled {
@@ -685,22 +767,35 @@ html, body {
 .stats-table-wrap {
   border: 1px solid var(--border);
   border-radius: 8px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   max-height: min(480px, 55vh);
   background: var(--panel);
+  width: 100%;
 }
 
 .stats-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
 }
 
+.stats-table col.col-object { width: 28%; }
+.stats-table col.col-type { width: 6%; }
+.stats-table col.col-certified { width: 6%; }
+.stats-table col.col-catalog { width: 10%; }
+.stats-table col.col-schema { width: 10%; }
+.stats-table col.col-num { width: 4.4%; }
+.stats-table--resizable col.col-num { width: auto; }
+
 .stats-table th,
 .stats-table td {
-  padding: 8px 12px;
+  padding: 8px 10px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stats-table thead th {
@@ -709,10 +804,24 @@ html, body {
   z-index: 1;
   background: var(--panel);
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
+  white-space: normal;
+  line-height: 1.25;
+  vertical-align: bottom;
+  hyphens: auto;
+}
+
+.stats-th-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  padding-right: 18px;
+  word-break: break-word;
 }
 
 .stats-sortable {
@@ -817,16 +926,17 @@ body.stats-col-resizing * {
 }
 
 .stats-table .cell-name {
-  word-break: break-all;
-  max-width: 42vw;
+  word-break: break-word;
+  max-width: none;
+  white-space: normal;
 }
 
 .stats-object-cell {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
 
 .stats-object-name {
@@ -866,6 +976,10 @@ body.stats-col-resizing * {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--accent-2);
+}
+
+.stats-table td:not(.cell-name):not(.stats-object-cell) {
+  white-space: nowrap;
 }
 
 .stats-table .stats-num-muted {
