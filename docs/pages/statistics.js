@@ -91,7 +91,7 @@ export const statisticsPage = {
                 <input type="number" id="filter-size-max" class="stats-filter-input" min="0" step="1" placeholder="Any">
               </label>
             </div>
-            <span id="table-filter-label" class="stats-table-filter" hidden></span>
+            <div id="table-filter-chips" class="stats-filter-chips" hidden></div>
           </div>
           <p class="stats-table-hint">Use the menus to filter by catalog, schema, and object metrics. Charts also narrow the table (type, catalog, or a single object). Click column headers to sort.</p>
           <div class="stats-table-wrap">
@@ -153,7 +153,7 @@ export const statisticsPage = {
     const cardsEl = root.querySelector('#cards');
     const tableBodyEl = root.querySelector('#object-table-body');
     const tableCountEl = root.querySelector('#object-table-count');
-    const filterLabelEl = root.querySelector('#table-filter-label');
+    const filterChipsEl = root.querySelector('#table-filter-chips');
     const clearFilterBtn = root.querySelector('#clear-table-filter');
     const downloadCsvBtn = root.querySelector('#download-table-csv');
     const downloadXlsxBtn = root.querySelector('#download-table-xlsx');
@@ -435,7 +435,10 @@ export const statisticsPage = {
     }
 
     function syncTableFilterFromSelects() {
-      const prev = tableFilter && !tableFilter.object_full_name ? { ...tableFilter } : {};
+      const prev = tableFilter ? { ...tableFilter } : {};
+      // Changing catalog/schema means the user is moving beyond a single-
+      // object drill-down; drop the object filter but keep everything else
+      // (type, certified, metrics) intact.
       delete prev.object_full_name;
       delete prev.catalog;
       delete prev.schema;
@@ -491,62 +494,125 @@ export const statisticsPage = {
       else if (!schemaDropdown.getSelected().length) schemaDropdown.selectAll();
     }
 
-    function filterSummary() {
-      const metrics = readMetricFilters();
-      const hasMetrics = metricFiltersActive(metrics);
-      const hasChartFilter = tableFilter && (
-        tableFilter.object_full_name
-        || tableFilter.object_type
-        || (tableFilter.catalogs && tableFilter.catalogs.length)
-        || (tableFilter.schemas && tableFilter.schemas.length)
-        || tableFilter.certified !== undefined
-      );
-      if (!hasChartFilter && !hasMetrics) return '';
-      const parts = [];
-      if (tableFilter?.object_full_name) {
-        parts.push(`object = ${tableFilter.object_full_name}`);
-      } else if (tableFilter) {
-        if (tableFilter.object_type) parts.push(`type = ${tableFilter.object_type}`);
-        if (tableFilter.certified !== undefined) parts.push(`certified = ${tableFilter.certified ? 'yes' : 'no'}`);
-        if (tableFilter.catalogs?.length) parts.push(`catalog = ${tableFilter.catalogs.join(', ')}`);
-        if (tableFilter.schemas?.length) parts.push(`schema = ${tableFilter.schemas.join(', ')}`);
-      }
-      if (metrics.number_of_columns_min != null || metrics.number_of_columns_max != null) {
-        parts.push(`columns ${formatRange(metrics.number_of_columns_min, metrics.number_of_columns_max)}`);
-      }
-      if (metrics.has_filter != null) parts.push(`has filter = ${metrics.has_filter ? 'yes' : 'no'}`);
-      if (metrics.number_of_CTE_min != null || metrics.number_of_CTE_max != null) {
-        parts.push(`CTEs ${formatRange(metrics.number_of_CTE_min, metrics.number_of_CTE_max)}`);
-      }
-      if (metrics.number_of_select_min != null || metrics.number_of_select_max != null) {
-        parts.push(`selects ${formatRange(metrics.number_of_select_min, metrics.number_of_select_max)}`);
-      }
-      if (metrics.upstream_count_min != null || metrics.upstream_count_max != null) {
-        parts.push(`upstream ${formatRange(metrics.upstream_count_min, metrics.upstream_count_max)}`);
-      }
-      if (metrics.size_min != null || metrics.size_max != null) {
-        parts.push(`size ${formatRange(metrics.size_min, metrics.size_max)}`);
-      }
-      return parts.join(' · ');
-    }
-
     function formatRange(min, max) {
       if (min != null && max != null) return `${min}–${max}`;
       if (min != null) return `≥ ${min}`;
       return `≤ ${max}`;
     }
 
+    /** Compute the removable chips to show for the current filter state. */
+    function activeFilterChips() {
+      const metrics = readMetricFilters();
+      /** @type {{ id: string, label: string }[]} */
+      const chips = [];
+      if (tableFilter?.object_full_name) {
+        chips.push({ id: 'object', label: `Object: ${tableFilter.object_full_name}` });
+      }
+      if (tableFilter?.object_type) {
+        chips.push({ id: 'type', label: `Type: ${tableFilter.object_type}` });
+      }
+      if (tableFilter?.certified !== undefined) {
+        chips.push({ id: 'certified', label: tableFilter.certified ? 'Certified' : 'Not certified' });
+      }
+      if (tableFilter?.catalogs?.length) {
+        const shown = tableFilter.catalogs.length === 1
+          ? tableFilter.catalogs[0]
+          : `${tableFilter.catalogs.length} selected`;
+        chips.push({ id: 'catalogs', label: `Catalog: ${shown}` });
+      }
+      if (tableFilter?.schemas?.length) {
+        const shown = tableFilter.schemas.length === 1
+          ? tableFilter.schemas[0]
+          : `${tableFilter.schemas.length} selected`;
+        chips.push({ id: 'schemas', label: `Schema: ${shown}` });
+      }
+      if (metrics.number_of_columns_min != null || metrics.number_of_columns_max != null) {
+        chips.push({ id: 'metric:number_of_columns', label: `Columns ${formatRange(metrics.number_of_columns_min, metrics.number_of_columns_max)}` });
+      }
+      if (metrics.has_filter != null) {
+        chips.push({ id: 'metric:has_filter', label: `Has filter: ${metrics.has_filter ? 'yes' : 'no'}` });
+      }
+      if (metrics.number_of_CTE_min != null || metrics.number_of_CTE_max != null) {
+        chips.push({ id: 'metric:number_of_CTE', label: `CTEs ${formatRange(metrics.number_of_CTE_min, metrics.number_of_CTE_max)}` });
+      }
+      if (metrics.number_of_select_min != null || metrics.number_of_select_max != null) {
+        chips.push({ id: 'metric:number_of_select', label: `Selects ${formatRange(metrics.number_of_select_min, metrics.number_of_select_max)}` });
+      }
+      if (metrics.upstream_count_min != null || metrics.upstream_count_max != null) {
+        chips.push({ id: 'metric:upstream_count', label: `Upstream ${formatRange(metrics.upstream_count_min, metrics.upstream_count_max)}` });
+      }
+      if (metrics.size_min != null || metrics.size_max != null) {
+        chips.push({ id: 'metric:size', label: `Size ${formatRange(metrics.size_min, metrics.size_max)}` });
+      }
+      return chips;
+    }
+
+    function renderFilterChips() {
+      const chips = activeFilterChips();
+      if (!chips.length) {
+        filterChipsEl.hidden = true;
+        filterChipsEl.innerHTML = '';
+        return;
+      }
+      filterChipsEl.hidden = false;
+      filterChipsEl.innerHTML = chips
+        .map((c) => `
+          <span class="stats-filter-chip">
+            <span class="stats-filter-chip-label">${escapeHtml(c.label)}</span>
+            <button type="button" class="stats-filter-chip-remove" data-chip-id="${escapeAttr(c.id)}" aria-label="Remove ${escapeAttr(c.label)}">×</button>
+          </span>`)
+        .join('');
+    }
+
+    /** Remove a single filter by chip id. */
+    function removeFilterChip(id) {
+      if (id === 'object' && tableFilter) {
+        const next = { ...tableFilter };
+        delete next.object_full_name;
+        tableFilter = Object.keys(next).length ? next : null;
+      } else if (id === 'type' && tableFilter) {
+        const next = { ...tableFilter };
+        delete next.object_type;
+        tableFilter = Object.keys(next).length ? next : null;
+      } else if (id === 'certified' && tableFilter) {
+        const next = { ...tableFilter };
+        delete next.certified;
+        tableFilter = Object.keys(next).length ? next : null;
+      } else if (id === 'catalogs') {
+        catalogDropdown.selectAll();
+        refillSchemaOptions();
+        schemaDropdown.selectAll();
+        syncTableFilterFromSelects();
+      } else if (id === 'schemas') {
+        schemaDropdown.selectAll();
+        syncTableFilterFromSelects();
+      } else if (id.startsWith('metric:')) {
+        const field = id.slice('metric:'.length);
+        const clearInput = (el) => { if (el) el.value = ''; };
+        if (field === 'number_of_columns') { clearInput(colsMinInput); clearInput(colsMaxInput); }
+        else if (field === 'number_of_CTE') { clearInput(cteMinInput); clearInput(cteMaxInput); }
+        else if (field === 'number_of_select') { clearInput(selectMinInput); clearInput(selectMaxInput); }
+        else if (field === 'size') { clearInput(sizeMinInput); clearInput(sizeMaxInput); }
+        else if (field === 'upstream_count') { clearInput(upstreamMinInput); clearInput(upstreamMaxInput); }
+        else if (field === 'has_filter' && hasFilterSelect) hasFilterSelect.value = '';
+      }
+      applyTableFilter();
+    }
+
     /** @param {'type'|'catalog'|'object'|'certified'} source */
     function setFilterFromChart(source, label) {
       if (source === 'object') {
+        // Drilling into a single object overrides catalog/schema/type/etc.
+        // Reset the dropdowns to "all selected" (i.e. no dropdown filter)
+        // so their visible state matches the internal state.
         tableFilter = { object_full_name: label };
-        catalogDropdown.setSelected([]);
-        schemaDropdown.setSelected([]);
+        catalogDropdown.selectAll();
         refillSchemaOptions();
+        schemaDropdown.selectAll();
         applyTableFilter();
         return;
       }
-      const prev = tableFilter && !tableFilter.object_full_name ? { ...tableFilter } : {};
+      const prev = tableFilter ? { ...tableFilter } : {};
       delete prev.object_full_name;
       delete prev.catalog;
       delete prev.schema;
@@ -560,10 +626,12 @@ export const statisticsPage = {
         prev.catalogs = [label];
         delete prev.schemas;
         catalogDropdown.setSelected([label]);
-        schemaDropdown.setSelected([]);
       }
       tableFilter = Object.keys(prev).length ? prev : null;
-      refillSchemaOptions();
+      if (source === 'catalog') {
+        refillSchemaOptions();
+        schemaDropdown.selectAll();
+      }
       applyTableFilter();
     }
 
@@ -591,15 +659,9 @@ export const statisticsPage = {
       currentTableRows = sorted;
       renderTableBody(sorted);
       syncSortHeaders();
-      const summary = filterSummary();
-      if (summary) {
-        filterLabelEl.hidden = false;
-        filterLabelEl.textContent = `Filtered: ${summary}`;
-        clearFilterBtn.hidden = false;
-      } else {
-        filterLabelEl.hidden = true;
-        clearFilterBtn.hidden = metricFiltersActive(metrics);
-      }
+      renderFilterChips();
+      const chips = activeFilterChips();
+      clearFilterBtn.hidden = chips.length === 0;
       tableCountEl.textContent = `${sorted.length.toLocaleString()} row${sorted.length === 1 ? '' : 's'}`;
       const hasRows = sorted.length > 0;
       if (downloadCsvBtn) downloadCsvBtn.disabled = !hasRows;
@@ -618,28 +680,36 @@ export const statisticsPage = {
 
       refillCatalogOptions();
 
-      if (tableFilter?.object_full_name) {
-        catalogDropdown.setSelected([]);
-        schemaDropdown.setSelected([]);
-      } else {
-        if (Array.isArray(saved.selectedCatalogs) && saved.selectedCatalogs.length) {
-          catalogDropdown.setSelected(saved.selectedCatalogs);
-        } else if (tableFilter?.catalogs?.length) {
-          catalogDropdown.setSelected(tableFilter.catalogs);
-        }
-
-        refillSchemaOptions();
-
-        if (Array.isArray(saved.selectedSchemas) && saved.selectedSchemas.length) {
-          schemaDropdown.setSelected(saved.selectedSchemas);
-        } else if (tableFilter?.schemas?.length) {
-          schemaDropdown.setSelected(tableFilter.schemas);
-        }
-
-        syncTableFilterFromSelects();
+      // Restore catalog selection: prefer the saved dropdown state,
+      // fall back to the saved tableFilter. If neither yields anything,
+      // the dropdown stays at "All" (the default after refill).
+      if (Array.isArray(saved.selectedCatalogs) && saved.selectedCatalogs.length) {
+        catalogDropdown.setSelected(saved.selectedCatalogs);
+      } else if (tableFilter?.catalogs?.length) {
+        catalogDropdown.setSelected(tableFilter.catalogs);
       }
 
       refillSchemaOptions();
+
+      if (Array.isArray(saved.selectedSchemas) && saved.selectedSchemas.length) {
+        schemaDropdown.setSelected(saved.selectedSchemas);
+      } else if (tableFilter?.schemas?.length) {
+        schemaDropdown.setSelected(tableFilter.schemas);
+      }
+
+      // Rebuild the catalog/schema portion of tableFilter from the
+      // dropdown state so the two agree, while preserving any other
+      // fields on tableFilter (object_full_name, object_type, certified).
+      const rest = tableFilter ? { ...tableFilter } : {};
+      delete rest.catalog;
+      delete rest.schema;
+      delete rest.catalogs;
+      delete rest.schemas;
+      const cats = activeCatalogFilter();
+      const schs = activeSchemaFilter();
+      if (cats) rest.catalogs = cats;
+      if (schs) rest.schemas = schs;
+      tableFilter = Object.keys(rest).length ? rest : null;
 
       const metrics = saved.metrics && typeof saved.metrics === 'object' ? saved.metrics : {};
       const setNum = (el, key) => {
@@ -925,8 +995,10 @@ export const statisticsPage = {
     }
 
     catalogDropdown.onChange(() => {
-      syncTableFilterFromSelects();
+      // Refill schemas first so its selection settles for the new catalog
+      // scope, then capture both dropdowns into tableFilter in one shot.
       refillSchemaOptions();
+      syncTableFilterFromSelects();
       applyTableFilter();
     });
 
@@ -938,11 +1010,18 @@ export const statisticsPage = {
     clearFilterBtn.addEventListener('click', () => {
       tableFilter = null;
       catalogDropdown.selectAll();
+      refillSchemaOptions();
       schemaDropdown.selectAll();
       clearMetricFilterInputs();
-      refillSchemaOptions();
       clearStatsFilterState();
       applyTableFilter();
+    });
+
+    filterChipsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.stats-filter-chip-remove');
+      if (!btn) return;
+      const id = btn.getAttribute('data-chip-id');
+      if (id) removeFilterChip(id);
     });
 
     if (downloadCsvBtn) {
@@ -984,10 +1063,11 @@ export const statisticsPage = {
       allTableRows = tableRows;
       refillCatalogOptions();
       refillSchemaOptions();
+      // restoreFilterState populates tableFilter (including any
+      // object_full_name / object_type / certified) and syncs the
+      // dropdowns. Don't call syncTableFilterFromSelects afterwards —
+      // it would drop object_full_name.
       restoreFilterState();
-      if (!catalogDropdown.getSelected().length) catalogDropdown.selectAll();
-      if (!schemaDropdown.getSelected().length) schemaDropdown.selectAll();
-      syncTableFilterFromSelects();
       summaryEl.innerHTML = renderSummary(summary);
 
       const certBreakdown = () => {
