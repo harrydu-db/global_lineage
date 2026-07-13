@@ -63,7 +63,9 @@ export function createCheckboxDropdown(container, options = {}) {
   }
 
   function updateTriggerLabel() {
-    if (!items.length || isAllSelected()) {
+    // Both "everything selected" and "nothing selected" map to the same
+    // semantic: "no filter". Show the placeholder in both cases.
+    if (!items.length || isAllSelected() || selected.size === 0) {
       labelEl.textContent = placeholder;
       return;
     }
@@ -96,20 +98,11 @@ export function createCheckboxDropdown(container, options = {}) {
     if (allCb) allCb.indeterminate = someSelected;
   }
 
-  // The dropdown never allows an empty selection — that state is
-  // ambiguous (does it mean "no filter" or "no rows"?). Whenever a
-  // caller tries to end up with nothing selected, we fall back to
-  // "all selected", which is our "no filter" state.
-  function normalizeSelection() {
-    if (items.length > 0 && selected.size === 0) selectAll();
-  }
-
   function setSelected(values) {
     selected = new Set(
       (Array.isArray(values) ? values : [])
         .filter((v) => v != null && v !== '' && items.includes(v))
     );
-    normalizeSelection();
     renderPanel();
     updateTriggerLabel();
   }
@@ -118,7 +111,6 @@ export function createCheckboxDropdown(container, options = {}) {
   function setOptions(values) {
     items = [...values];
     selected = new Set([...selected].filter((v) => items.includes(v)));
-    normalizeSelection();
     renderPanel();
     updateTriggerLabel();
   }
@@ -159,10 +151,11 @@ export function createCheckboxDropdown(container, options = {}) {
     const cb = /** @type {HTMLInputElement | null} */ (e.target.closest('input[type="checkbox"]'));
     if (!cb) return;
     if (cb.value === ALL_VALUE) {
-      // The "All" row is a select-all action. Clicking it — whether it was
-      // checked or unchecked — always resolves to "select every item".
-      // There's no useful "select none" state (see normalizeSelection).
-      selectAll();
+      // The "All" row is a bulk toggle: check → select every item,
+      // uncheck → clear the selection. Both empty and full states are
+      // valid and both mean "no filter" downstream.
+      if (cb.checked) selectAll();
+      else selectNone();
       renderPanel();
       updateTriggerLabel();
       if (onChangeFn) onChangeFn(getSelected());
@@ -170,7 +163,6 @@ export function createCheckboxDropdown(container, options = {}) {
     }
     if (cb.checked) selected.add(cb.value);
     else selected.delete(cb.value);
-    normalizeSelection();
     renderPanel();
     updateTriggerLabel();
     if (onChangeFn) onChangeFn(getSelected());

@@ -680,10 +680,11 @@ export const statisticsPage = {
 
       refillCatalogOptions();
 
-      // Restore catalog selection: prefer the saved dropdown state,
-      // fall back to the saved tableFilter. If neither yields anything,
-      // the dropdown stays at "All" (the default after refill).
-      if (Array.isArray(saved.selectedCatalogs) && saved.selectedCatalogs.length) {
+      // Restore catalog selection: prefer the saved dropdown state
+      // (including an intentionally empty selection), fall back to the
+      // saved tableFilter. If neither is present, the dropdown stays at
+      // "All" (the default after refill).
+      if (Array.isArray(saved.selectedCatalogs)) {
         catalogDropdown.setSelected(saved.selectedCatalogs);
       } else if (tableFilter?.catalogs?.length) {
         catalogDropdown.setSelected(tableFilter.catalogs);
@@ -691,7 +692,7 @@ export const statisticsPage = {
 
       refillSchemaOptions();
 
-      if (Array.isArray(saved.selectedSchemas) && saved.selectedSchemas.length) {
+      if (Array.isArray(saved.selectedSchemas)) {
         schemaDropdown.setSelected(saved.selectedSchemas);
       } else if (tableFilter?.schemas?.length) {
         schemaDropdown.setSelected(tableFilter.schemas);
