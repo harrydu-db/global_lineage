@@ -460,6 +460,32 @@ html, body {
 }
 
 .side-panel .field { margin-bottom: 10px; }
+.side-panel .detail-title { margin-bottom: 12px; }
+.side-panel .detail-name {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+  line-height: 1.3;
+}
+.side-panel a.detail-name {
+  color: var(--accent);
+  text-decoration: none;
+}
+.side-panel a.detail-name:hover {
+  color: var(--accent-hover-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.node-popover .title a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.node-popover .title a:hover {
+  color: var(--accent-hover-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .side-panel .label { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
 .side-panel .value { color: var(--text); word-break: break-all; }
 .side-panel a { color: var(--accent); }
@@ -989,6 +1015,18 @@ body.stats-col-resizing * {
   flex: 1 1 140px;
   min-width: 0;
   word-break: break-all;
+}
+
+.stats-object-name a {
+  display: inline;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.stats-object-name a:hover {
+  color: var(--accent-hover-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .stats-lineage-btn {

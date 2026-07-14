@@ -762,10 +762,11 @@ export const statisticsPage = {
             const cteCell = renderMetricNumberCell(r.number_of_CTE);
             const selectCell = renderMetricNumberCell(r.number_of_select);
             const sizeCell = renderMetricNumberCell(r.size);
+            const objectLink = r.link ? String(r.link) : '';
             return `
         <tr>
           <td class="cell-name stats-object-cell" title="${escapeAttr(r.object_full_name)}">
-            <span class="stats-object-name">${escapeHtml(r.object_full_name)}</span>
+            ${objectNameHtml(r.object_full_name, objectLink, 'stats-object-name')}
             <button type="button" class="stats-lineage-btn" data-open-lineage="${escapeAttr(r.object_full_name)}" aria-label="Open in Lineage">Lineage</button>
           </td>
           <td>${escapeHtml(r.object_type ?? 'Unknown')}</td>
@@ -1177,6 +1178,13 @@ function renderHasFilterCell(value) {
   return value
     ? '<td><span class="cert-badge cert-badge--yes" title="Definition includes a filter">Yes</span></td>'
     : '<td><span class="cert-badge cert-badge--no">No</span></td>';
+}
+
+function objectNameHtml(name, link, className = '') {
+  const text = escapeHtml(name);
+  const cls = className ? ` class="${escapeAttr(className)}"` : '';
+  if (!link) return `<span${cls}>${text}</span>`;
+  return `<span${cls}><a href="${escapeAttr(link)}" target="_blank" rel="noopener">${text}</a></span>`;
 }
 
 // Columns exported by the CSV / Excel downloads — mirrors the visible table.

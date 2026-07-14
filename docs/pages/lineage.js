@@ -578,6 +578,7 @@ export const lineagePage = {
 function renderPopover(node, exploreUrlFor) {
   const name = node.label || node.id;
   const url = exploreUrlFor(name);
+  const externalLink = node.data && node.data.link ? String(node.data.link) : '';
   const certified = !!(node.data && node.data.certified);
   const rowDefs = [['Type', escapeHtml(node.type || '—')]];
   // Only surface certification when the object is actually certified.
@@ -589,7 +590,7 @@ function renderPopover(node, exploreUrlFor) {
     )
     .join('');
   const link = `<div class="row"><span class="k">Catalog</span><span class="v"><a href="${escapeAttr(url)}" target="_blank" rel="noopener">Open in Unity Catalog ↗</a></span></div>`;
-  return `<div class="title">${escapeHtml(name)}</div>${rows}${link}`;
+  return `<div class="title">${objectNameHtml(name, externalLink)}</div>${rows}${link}`;
 }
 
 function positionPopover(popoverEl, mouseEvent, hostEl) {
@@ -648,9 +649,9 @@ function objectMetricFieldRows(data) {
 function renderNodeDetails(node, exploreUrlFor) {
   const name = node.label || node.id;
   const url = exploreUrlFor(name);
+  const externalLink = node.data && node.data.link ? String(node.data.link) : '';
   const certified = !!(node.data && node.data.certified);
   const fields = [
-    ['Object', escapeHtml(name)],
     ['Type', escapeHtml(node.type || '—')],
   ];
   // Only surface certification when the object is actually certified.
@@ -669,7 +670,14 @@ function renderNodeDetails(node, exploreUrlFor) {
     <div class="label">Unity Catalog</div>
     <div class="value"><a href="${escapeAttr(url)}" target="_blank" rel="noopener">Open ↗</a></div>
   </div>`;
-  return `${rows}${link}`;
+  return `<div class="detail-title">${objectNameHtml(name, externalLink, 'detail-name')}</div>${rows}${link}`;
+}
+
+function objectNameHtml(name, link, className = '') {
+  const text = escapeHtml(name);
+  const cls = className ? ` class="${escapeAttr(className)}"` : '';
+  if (!link) return `<span${cls}>${text}</span>`;
+  return `<a${cls} href="${escapeAttr(link)}" target="_blank" rel="noopener">${text}</a>`;
 }
 
 function escapeHtml(s) {

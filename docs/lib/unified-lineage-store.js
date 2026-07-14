@@ -34,7 +34,7 @@ export async function listInputLineageFiles() {
   }
 }
 
-/** @typedef {{ object_full_name: string, object_type?: string|null, upstream_objects?: string[], certified?: boolean, number_of_columns?: number|null, has_filter?: boolean|null, number_of_CTE?: number|null, number_of_select?: number|null, size?: number|null }} UnifiedRow */
+/** @typedef {{ object_full_name: string, object_type?: string|null, link?: string|null, upstream_objects?: string[], certified?: boolean, number_of_columns?: number|null, has_filter?: boolean|null, number_of_CTE?: number|null, number_of_select?: number|null, size?: number|null }} UnifiedRow */
 
 /** @typedef {{ number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }} ObjectMetrics */
 
@@ -168,6 +168,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
   const certifiedNames = new Set();
   /** @type {Map<string, ObjectMetrics>} */
   const objectMetrics = new Map();
+  /** @type {Map<string, string>} External URLs from the source JSON `link` field. */
+  const objectLinks = new Map();
   /** @type {Map<string, Set<string>>} */
   const downstream = new Map();
   /** @type {Map<string, Set<string>>} */
@@ -181,6 +183,9 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
     allNames.add(target);
     objectTypes.set(target, row.object_type ?? null);
     objectMetrics.set(target, parseObjectMetrics(row));
+    if (row.link != null && String(row.link).trim()) {
+      objectLinks.set(target, String(row.link).trim());
+    }
     if (row.certified === true) certifiedNames.add(target);
     const ups = Array.isArray(row.upstream_objects) ? row.upstream_objects : [];
     for (const source of ups) {
@@ -258,12 +263,16 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
     return objectMetrics.get(id) ?? emptyObjectMetrics();
   }
 
+  function linkFor(id) {
+    return objectLinks.get(id) ?? null;
+  }
+
   function toGraphNodes(ids) {
     return [...ids].sort().map((id) => ({
       id,
       label: id,
       type: objectTypes.get(id) ?? null,
-      data: { certified: isCertified(id), ...metricsFor(id) },
+      data: { certified: isCertified(id), link: linkFor(id), ...metricsFor(id) },
     }));
   }
 
@@ -430,7 +439,7 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
   /**
    * Rows for the statistics table. Filters are combined with AND when multiple are set.
    * @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null, has_filter?: boolean|null, number_of_columns_min?: number|null, number_of_columns_max?: number|null, number_of_CTE_min?: number|null, number_of_CTE_max?: number|null, number_of_select_min?: number|null, number_of_select_max?: number|null, size_min?: number|null, size_max?: number|null }} filter
-   * @returns {{ object_full_name: string, object_type: string|null, certified: boolean, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], longest_upstream_depth: number, longest_downstream_depth: number, longest_upstream_path: string[], longest_downstream_path: string[], number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }[]}
+   * @returns {{ object_full_name: string, object_type: string|null, link: string|null, certified: boolean, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], longest_upstream_depth: number, longest_downstream_depth: number, longest_upstream_path: string[], longest_downstream_path: string[], number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }[]}
    */
   function listObjectsForStats(filter = {}) {
     const typeEq = filter.object_type != null && filter.object_type !== '' ? String(filter.object_type) : null;
@@ -490,6 +499,7 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
       return {
         object_full_name,
         object_type: objectTypes.get(object_full_name) ?? null,
+        link: linkFor(object_full_name),
         certified: isCertified(object_full_name),
         catalog,
         schema,
@@ -518,6 +528,7 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
     return {
       object_full_name: fullName,
       object_type: objectTypes.get(fullName) ?? null,
+      link: linkFor(fullName),
       certified: isCertified(fullName),
       upstream_objects: [...(upstream.get(fullName) || [])].sort(),
       downstream_objects: [...(downstream.get(fullName) || [])].sort(),
