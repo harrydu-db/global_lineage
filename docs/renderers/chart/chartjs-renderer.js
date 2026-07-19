@@ -15,6 +15,49 @@ function colorsFor(n) {
   return out;
 }
 
+/** Pick black or white text for legibility on a given hex fill. */
+function contrastText(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return '#ffffff';
+  const int = parseInt(m[1], 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  // Relative luminance (sRGB, perceptual weights).
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#000000' : '#ffffff';
+}
+
+// Inline plugin (no CDN dependency): draw each slice's share as a percentage
+// at the slice centroid. Slices thinner than the threshold are skipped so the
+// labels stay readable; the exact percentage is still in the tooltip.
+const piePercentLabels = {
+  id: 'piePercentLabels',
+  afterDatasetsDraw(chart) {
+    const meta = chart.getDatasetMeta(0);
+    if (!meta || !meta.data || !meta.data.length) return;
+    const ds = chart.data.datasets[0];
+    const values = ds.data || [];
+    const total = values.reduce((a, b) => a + (Number(b) || 0), 0);
+    if (!total) return;
+    const bg = ds.backgroundColor || [];
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = '600 11px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    meta.data.forEach((arc, i) => {
+      const value = Number(values[i]) || 0;
+      const pct = (value / total) * 100;
+      if (pct < 5) return; // skip thin slices to avoid overlap
+      const { x, y } = arc.getCenterPoint();
+      ctx.fillStyle = contrastText(Array.isArray(bg) ? bg[i] : bg);
+      ctx.fillText(`${Math.round(pct)}%`, x, y);
+    });
+    ctx.restore();
+  },
+};
+
 function chartTheme() {
   const light = getTheme() === 'light';
   return {
@@ -84,9 +127,21 @@ export function createChartJsRenderer() {
             plugins: {
               ...COMMON_OPTS.plugins,
               legend: { ...COMMON_OPTS.plugins.legend, position: 'right' },
+              tooltip: {
+                ...COMMON_OPTS.plugins.tooltip,
+                callbacks: {
+                  label: (item) => {
+                    const value = Number(item.parsed) || 0;
+                    const total = (item.dataset.data || []).reduce((a, b) => a + (Number(b) || 0), 0);
+                    const pct = total ? (value / total) * 100 : 0;
+                    return `${item.label}: ${value.toLocaleString()} (${pct.toFixed(1)}%)`;
+                  },
+                },
+              },
             },
             ...(chartOnClick ? { onClick: chartOnClick } : {}),
           },
+          plugins: [piePercentLabels],
         };
       } else if (kind === 'horizontalBar') {
         cfg = {

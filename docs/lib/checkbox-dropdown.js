@@ -56,10 +56,14 @@ export function createCheckboxDropdown(container, options = {}) {
 
   function selectAll() {
     selected = new Set(items);
+    renderPanel();
+    updateTriggerLabel();
   }
 
   function selectNone() {
     selected.clear();
+    renderPanel();
+    updateTriggerLabel();
   }
 
   function updateTriggerLabel() {

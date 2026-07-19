@@ -11,6 +11,15 @@ import { clearStatsFilterState, loadStatsFilterState, saveStatsFilterState } fro
 import { createCheckboxDropdown } from '../lib/checkbox-dropdown.js';
 import { createChartJsRenderer as createChartRenderer } from '../renderers/chart/chartjs-renderer.js';
 
+// Synthetic schema options: when one is selected, it matches every schema
+// whose name ends with the given suffix, regardless of catalog. These are
+// not real schema names. Listed in the order they should appear in the menu.
+const SCHEMA_WILDCARDS = [
+  { value: '*_gold', suffix: '_gold' },
+  { value: '*_silver', suffix: '_silver' },
+  { value: '*_bronze', suffix: '_bronze' },
+];
+
 export const statisticsPage = {
   id: 'statistics',
   title: 'Statistics',
@@ -22,10 +31,8 @@ export const statisticsPage = {
       </div>
       <div class="stats-body">
         <section id="summary" class="summary-row"></section>
-        <section id="cards" class="card-grid"></section>
-        <section id="object-table-section" class="stats-table-section" aria-labelledby="object-table-heading">
+        <section id="filters" class="stats-filters-section" aria-label="Filters">
           <div class="stats-table-head">
-            <h2 id="object-table-heading">Objects</h2>
             <div class="stats-table-filters" role="group" aria-label="Catalog and schema">
               <label class="stats-filter-field">
                 <span>Catalog</span>
@@ -35,10 +42,24 @@ export const statisticsPage = {
                 <span>Schema</span>
                 <div id="filter-schema"></div>
               </label>
+              <label class="stats-filter-field">
+                <span>Object type</span>
+                <div id="filter-object-type"></div>
+              </label>
+              <label class="stats-filter-field">
+                <span>Certified</span>
+                <div id="filter-certified"></div>
+              </label>
+              <label class="stats-filter-field">
+                <span>Deprecated</span>
+                <div id="filter-deprecated"></div>
+              </label>
+              <label class="stats-filter-field">
+                <span>New</span>
+                <div id="filter-new"></div>
+              </label>
               <div class="stats-table-actions">
                 <button type="button" id="clear-table-filter" class="stats-table-clear" hidden>Clear filter</button>
-                <button type="button" id="download-table-csv" class="stats-table-download" disabled title="Download the filtered table as CSV">Download CSV</button>
-                <button type="button" id="download-table-xlsx" class="stats-table-download" disabled title="Download the filtered table as Excel (.xlsx)">Download Excel</button>
               </div>
             </div>
             <div class="stats-table-filters stats-table-metric-filters" role="group" aria-label="Object metrics">
@@ -83,6 +104,14 @@ export const statisticsPage = {
                 <input type="number" id="filter-upstream-max" class="stats-filter-input" min="0" step="1" placeholder="Any">
               </label>
               <label class="stats-filter-field">
+                <span>Downstream min</span>
+                <input type="number" id="filter-downstream-min" class="stats-filter-input" min="0" step="1" placeholder="Any">
+              </label>
+              <label class="stats-filter-field">
+                <span>Downstream max</span>
+                <input type="number" id="filter-downstream-max" class="stats-filter-input" min="0" step="1" placeholder="Any">
+              </label>
+              <label class="stats-filter-field">
                 <span>Size min</span>
                 <input type="number" id="filter-size-min" class="stats-filter-input" min="0" step="1" placeholder="Any">
               </label>
@@ -93,7 +122,17 @@ export const statisticsPage = {
             </div>
             <div id="table-filter-chips" class="stats-filter-chips" hidden></div>
           </div>
-          <p class="stats-table-hint">Use the menus to filter by catalog, schema, and object metrics. Charts also narrow the table (type, catalog, or a single object). Click column headers to sort.</p>
+          <p class="stats-table-hint">Filters apply to the charts and the table below. The totals at the top always reflect the full dataset. Click a chart segment to filter; click table column headers to sort.</p>
+        </section>
+        <section id="cards" class="card-grid"></section>
+        <section id="object-table-section" class="stats-table-section" aria-labelledby="object-table-heading">
+          <div class="stats-table-head">
+            <h2 id="object-table-heading">Objects</h2>
+            <div class="stats-table-actions">
+              <button type="button" id="download-table-csv" class="stats-table-download" disabled title="Download the filtered table as CSV">Download CSV</button>
+              <button type="button" id="download-table-xlsx" class="stats-table-download" disabled title="Download the filtered table as Excel (.xlsx)">Download Excel</button>
+            </div>
+          </div>
           <div class="stats-table-wrap">
             <table class="stats-table" id="object-table">
               <colgroup>
@@ -159,6 +198,10 @@ export const statisticsPage = {
     const downloadXlsxBtn = root.querySelector('#download-table-xlsx');
     const catalogSelectRoot = root.querySelector('#filter-catalog');
     const schemaSelectRoot = root.querySelector('#filter-schema');
+    const objectTypeSelectRoot = root.querySelector('#filter-object-type');
+    const certifiedSelectRoot = root.querySelector('#filter-certified');
+    const deprecatedSelectRoot = root.querySelector('#filter-deprecated');
+    const newSelectRoot = root.querySelector('#filter-new');
 
     const catalogDropdown = createCheckboxDropdown(catalogSelectRoot, {
       placeholder: 'All catalogs',
@@ -170,6 +213,32 @@ export const statisticsPage = {
       allLabel: 'All schemas',
       ariaLabel: 'Filter by schema',
     });
+    const objectTypeDropdown = createCheckboxDropdown(objectTypeSelectRoot, {
+      placeholder: 'All types',
+      allLabel: 'All types',
+      ariaLabel: 'Filter by object type',
+    });
+    const certifiedDropdown = createCheckboxDropdown(certifiedSelectRoot, {
+      placeholder: 'All',
+      allLabel: 'All',
+      ariaLabel: 'Filter by certification',
+    });
+    // Certification is a fixed Yes/No choice; both selected (or none) = All.
+    certifiedDropdown.setOptions(['Yes', 'No']);
+    const deprecatedDropdown = createCheckboxDropdown(deprecatedSelectRoot, {
+      placeholder: 'All',
+      allLabel: 'All',
+      ariaLabel: 'Filter by deprecation',
+    });
+    // Deprecation is a fixed Yes/No choice; both selected (or none) = All.
+    deprecatedDropdown.setOptions(['Yes', 'No']);
+    const newDropdown = createCheckboxDropdown(newSelectRoot, {
+      placeholder: 'All',
+      allLabel: 'All',
+      ariaLabel: 'Filter by new',
+    });
+    // "New" is a fixed Yes/No choice; both selected (or none) = All.
+    newDropdown.setOptions(['Yes', 'No']);
     const colsMinInput = root.querySelector('#filter-cols-min');
     const colsMaxInput = root.querySelector('#filter-cols-max');
     const hasFilterSelect = root.querySelector('#filter-has-filter');
@@ -181,6 +250,8 @@ export const statisticsPage = {
     const sizeMaxInput = root.querySelector('#filter-size-max');
     const upstreamMinInput = root.querySelector('#filter-upstream-min');
     const upstreamMaxInput = root.querySelector('#filter-upstream-max');
+    const downstreamMinInput = root.querySelector('#filter-downstream-min');
+    const downstreamMaxInput = root.querySelector('#filter-downstream-max');
     const listModal = root.querySelector('#stats-list-modal');
     const listModalTitle = root.querySelector('#stats-list-modal-title');
     const listModalList = root.querySelector('#stats-list-modal-list');
@@ -190,7 +261,7 @@ export const statisticsPage = {
 
     const renderers = [];
 
-    /** @type {{ object_type?: string, catalogs?: string[], schemas?: string[], object_full_name?: string, certified?: boolean, has_filter?: boolean, number_of_columns_min?: number, number_of_columns_max?: number, number_of_CTE_min?: number, number_of_CTE_max?: number, number_of_select_min?: number, number_of_select_max?: number, size_min?: number, size_max?: number, upstream_count_min?: number, upstream_count_max?: number } | null} */
+    /** @type {{ object_types?: string[], catalogs?: string[], schemas?: string[], object_full_name?: string, certified?: boolean, has_filter?: boolean, number_of_columns_min?: number, number_of_columns_max?: number, number_of_CTE_min?: number, number_of_CTE_max?: number, number_of_select_min?: number, number_of_select_max?: number, size_min?: number, size_max?: number, upstream_count_min?: number, upstream_count_max?: number, downstream_count_min?: number, downstream_count_max?: number } | null} */
     let tableFilter = null;
     /** @type {{ object_full_name: string, object_type: string|null, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }[]} */
     let allTableRows = [];
@@ -349,6 +420,8 @@ export const statisticsPage = {
         size_max: parseNumberInput(sizeMaxInput),
         upstream_count_min: parseNumberInput(upstreamMinInput),
         upstream_count_max: parseNumberInput(upstreamMaxInput),
+        downstream_count_min: parseNumberInput(downstreamMinInput),
+        downstream_count_max: parseNumberInput(downstreamMaxInput),
       };
     }
 
@@ -363,7 +436,9 @@ export const statisticsPage = {
         || metrics.size_min != null
         || metrics.size_max != null
         || metrics.upstream_count_min != null
-        || metrics.upstream_count_max != null;
+        || metrics.upstream_count_max != null
+        || metrics.downstream_count_min != null
+        || metrics.downstream_count_max != null;
     }
 
     function rowMatchesMetricFilters(row, metrics) {
@@ -374,6 +449,7 @@ export const statisticsPage = {
         ['number_of_select', metrics.number_of_select_min, metrics.number_of_select_max],
         ['size', metrics.size_min, metrics.size_max],
         ['upstream_count', metrics.upstream_count_min, metrics.upstream_count_max],
+        ['downstream_count', metrics.downstream_count_min, metrics.downstream_count_max],
       ];
       for (const [key, min, max] of bounds) {
         if (min == null && max == null) continue;
@@ -386,7 +462,7 @@ export const statisticsPage = {
     }
 
     function clearMetricFilterInputs() {
-      for (const input of [colsMinInput, colsMaxInput, cteMinInput, cteMaxInput, selectMinInput, selectMaxInput, sizeMinInput, sizeMaxInput, upstreamMinInput, upstreamMaxInput]) {
+      for (const input of [colsMinInput, colsMaxInput, cteMinInput, cteMaxInput, selectMinInput, selectMaxInput, sizeMinInput, sizeMaxInput, upstreamMinInput, upstreamMaxInput, downstreamMinInput, downstreamMaxInput]) {
         if (input) input.value = '';
       }
       if (hasFilterSelect) hasFilterSelect.value = '';
@@ -400,6 +476,10 @@ export const statisticsPage = {
       return schemaDropdown.getSelected();
     }
 
+    function selectedObjectTypes() {
+      return objectTypeDropdown.getSelected();
+    }
+
     function normalizeCatalogSchemaFilter(filter) {
       if (!filter) return null;
       const next = { ...filter };
@@ -411,13 +491,16 @@ export const statisticsPage = {
         next.schemas = [next.schema];
         delete next.schema;
       }
-      if (Array.isArray(next.catalogs)) {
-        next.catalogs = next.catalogs.filter((v) => v != null && v !== '');
-        if (!next.catalogs.length) delete next.catalogs;
+      // Legacy single-value object type → array.
+      if (next.object_type && !next.object_types) {
+        next.object_types = [next.object_type];
+        delete next.object_type;
       }
-      if (Array.isArray(next.schemas)) {
-        next.schemas = next.schemas.filter((v) => v != null && v !== '');
-        if (!next.schemas.length) delete next.schemas;
+      for (const key of ['catalogs', 'schemas', 'object_types']) {
+        if (Array.isArray(next[key])) {
+          next[key] = next[key].filter((v) => v != null && v !== '');
+          if (!next[key].length) delete next[key];
+        }
       }
       return Object.keys(next).length ? next : null;
     }
@@ -434,20 +517,62 @@ export const statisticsPage = {
       return schemas.length ? schemas : null;
     }
 
+    function activeObjectTypeFilter() {
+      if (objectTypeDropdown.isAllSelected()) return null;
+      const types = selectedObjectTypes();
+      return types.length ? types : null;
+    }
+
+    // Yes only → true, No only → false, both/none → undefined (no filter).
+    function activeCertifiedFilter() {
+      if (certifiedDropdown.isAllSelected()) return undefined;
+      const sel = certifiedDropdown.getSelected();
+      if (sel.length === 1) return sel[0] === 'Yes';
+      return undefined;
+    }
+
+    // Yes only → true, No only → false, both/none → undefined (no filter).
+    function activeDeprecatedFilter() {
+      if (deprecatedDropdown.isAllSelected()) return undefined;
+      const sel = deprecatedDropdown.getSelected();
+      if (sel.length === 1) return sel[0] === 'Yes';
+      return undefined;
+    }
+
+    // Yes only → true, No only → false, both/none → undefined (no filter).
+    function activeNewFilter() {
+      if (newDropdown.isAllSelected()) return undefined;
+      const sel = newDropdown.getSelected();
+      if (sel.length === 1) return sel[0] === 'Yes';
+      return undefined;
+    }
+
     function syncTableFilterFromSelects() {
       const prev = tableFilter ? { ...tableFilter } : {};
-      // Changing catalog/schema means the user is moving beyond a single-
-      // object drill-down; drop the object filter but keep everything else
-      // (type, certified, metrics) intact.
+      // Changing a dropdown means the user is moving beyond a single-object
+      // drill-down; drop the object filter but keep the metrics intact.
       delete prev.object_full_name;
       delete prev.catalog;
       delete prev.schema;
+      delete prev.object_type;
       const catalogs = activeCatalogFilter();
       const schemas = activeSchemaFilter();
+      const objectTypes = activeObjectTypeFilter();
+      const certified = activeCertifiedFilter();
+      const deprecated = activeDeprecatedFilter();
+      const isNew = activeNewFilter();
       if (catalogs) prev.catalogs = catalogs;
       else delete prev.catalogs;
       if (schemas) prev.schemas = schemas;
       else delete prev.schemas;
+      if (objectTypes) prev.object_types = objectTypes;
+      else delete prev.object_types;
+      if (certified !== undefined) prev.certified = certified;
+      else delete prev.certified;
+      if (deprecated !== undefined) prev.deprecated = deprecated;
+      else delete prev.deprecated;
+      if (isNew !== undefined) prev.new = isNew;
+      else delete prev.new;
       tableFilter = Object.keys(prev).length ? prev : null;
     }
 
@@ -456,6 +581,10 @@ export const statisticsPage = {
         tableFilter,
         selectedCatalogs: selectedCatalogs(),
         selectedSchemas: selectedSchemas(),
+        selectedObjectTypes: selectedObjectTypes(),
+        selectedCertified: certifiedDropdown.getSelected(),
+        selectedDeprecated: deprecatedDropdown.getSelected(),
+        selectedNew: newDropdown.getSelected(),
         metrics: readMetricFilters(),
         sortKey,
         sortDir,
@@ -464,6 +593,22 @@ export const statisticsPage = {
 
     function uniqueSorted(values) {
       return [...new Set(values)].filter((v) => v != null && v !== '' && v !== '—').sort();
+    }
+
+    // Wildcards whose suffix at least one in-scope schema matches, in menu order.
+    function matchingWildcards(rows) {
+      return SCHEMA_WILDCARDS.filter((w) =>
+        rows.some((r) => typeof r.schema === 'string' && r.schema.endsWith(w.suffix))
+      );
+    }
+
+    // A row's schema matches the selected schemas if it is explicitly listed,
+    // or if a selected wildcard's suffix (e.g. `*_gold`) matches the schema.
+    function schemaMatchesFilter(schema, schemas) {
+      if (schemas.includes(schema)) return true;
+      return SCHEMA_WILDCARDS.some(
+        (w) => schemas.includes(w.value) && typeof schema === 'string' && schema.endsWith(w.suffix)
+      );
     }
 
     function refillCatalogOptions() {
@@ -482,16 +627,30 @@ export const statisticsPage = {
     function refillSchemaOptions() {
       const cats = activeCatalogFilter() || [];
       const keep = selectedSchemas();
-      const schemas = uniqueSorted(
-        allTableRows
-          .filter((r) => !cats.length || cats.includes(r.catalog))
-          .map((r) => r.schema)
-      );
-      schemaDropdown.setOptions(schemas);
+      const inScope = allTableRows.filter((r) => !cats.length || cats.includes(r.catalog));
+      const schemas = uniqueSorted(inScope.map((r) => r.schema));
+      // Offer the tier wildcards (e.g. `*_gold`, `*_silver`) at the top for
+      // whichever suffixes the current catalog scope actually contains.
+      const wildcards = matchingWildcards(inScope).map((w) => w.value);
+      const options = [...wildcards, ...schemas];
+      schemaDropdown.setOptions(options);
       const prefer = tableFilter?.schemas?.length ? tableFilter.schemas : keep;
-      const valid = prefer.filter((s) => schemas.includes(s));
+      const valid = prefer.filter((s) => options.includes(s));
       if (valid.length) schemaDropdown.setSelected(valid);
       else if (!schemaDropdown.getSelected().length) schemaDropdown.selectAll();
+    }
+
+    function refillObjectTypeOptions() {
+      const keep = selectedObjectTypes();
+      const types = uniqueSorted(allTableRows.map((r) => r.object_type ?? 'Unknown'));
+      objectTypeDropdown.setOptions(types);
+      const valid = keep.filter((t) => types.includes(t));
+      if (valid.length) objectTypeDropdown.setSelected(valid);
+      else if (tableFilter?.object_types?.length) {
+        objectTypeDropdown.setSelected(tableFilter.object_types.filter((t) => types.includes(t)));
+      } else if (!objectTypeDropdown.getSelected().length) {
+        objectTypeDropdown.selectAll();
+      }
     }
 
     function formatRange(min, max) {
@@ -508,11 +667,20 @@ export const statisticsPage = {
       if (tableFilter?.object_full_name) {
         chips.push({ id: 'object', label: `Object: ${tableFilter.object_full_name}` });
       }
-      if (tableFilter?.object_type) {
-        chips.push({ id: 'type', label: `Type: ${tableFilter.object_type}` });
+      if (tableFilter?.object_types?.length) {
+        const shown = tableFilter.object_types.length === 1
+          ? tableFilter.object_types[0]
+          : `${tableFilter.object_types.length} selected`;
+        chips.push({ id: 'type', label: `Type: ${shown}` });
       }
       if (tableFilter?.certified !== undefined) {
         chips.push({ id: 'certified', label: tableFilter.certified ? 'Certified' : 'Not certified' });
+      }
+      if (tableFilter?.deprecated !== undefined) {
+        chips.push({ id: 'deprecated', label: tableFilter.deprecated ? 'Deprecated' : 'Not deprecated' });
+      }
+      if (tableFilter?.new !== undefined) {
+        chips.push({ id: 'new', label: tableFilter.new ? 'New' : 'Not new' });
       }
       if (tableFilter?.catalogs?.length) {
         const shown = tableFilter.catalogs.length === 1
@@ -540,6 +708,9 @@ export const statisticsPage = {
       }
       if (metrics.upstream_count_min != null || metrics.upstream_count_max != null) {
         chips.push({ id: 'metric:upstream_count', label: `Upstream ${formatRange(metrics.upstream_count_min, metrics.upstream_count_max)}` });
+      }
+      if (metrics.downstream_count_min != null || metrics.downstream_count_max != null) {
+        chips.push({ id: 'metric:downstream_count', label: `Downstream ${formatRange(metrics.downstream_count_min, metrics.downstream_count_max)}` });
       }
       if (metrics.size_min != null || metrics.size_max != null) {
         chips.push({ id: 'metric:size', label: `Size ${formatRange(metrics.size_min, metrics.size_max)}` });
@@ -570,14 +741,18 @@ export const statisticsPage = {
         const next = { ...tableFilter };
         delete next.object_full_name;
         tableFilter = Object.keys(next).length ? next : null;
-      } else if (id === 'type' && tableFilter) {
-        const next = { ...tableFilter };
-        delete next.object_type;
-        tableFilter = Object.keys(next).length ? next : null;
-      } else if (id === 'certified' && tableFilter) {
-        const next = { ...tableFilter };
-        delete next.certified;
-        tableFilter = Object.keys(next).length ? next : null;
+      } else if (id === 'type') {
+        objectTypeDropdown.selectAll();
+        syncTableFilterFromSelects();
+      } else if (id === 'certified') {
+        certifiedDropdown.selectAll();
+        syncTableFilterFromSelects();
+      } else if (id === 'deprecated') {
+        deprecatedDropdown.selectAll();
+        syncTableFilterFromSelects();
+      } else if (id === 'new') {
+        newDropdown.selectAll();
+        syncTableFilterFromSelects();
       } else if (id === 'catalogs') {
         catalogDropdown.selectAll();
         refillSchemaOptions();
@@ -594,6 +769,7 @@ export const statisticsPage = {
         else if (field === 'number_of_select') { clearInput(selectMinInput); clearInput(selectMaxInput); }
         else if (field === 'size') { clearInput(sizeMinInput); clearInput(sizeMaxInput); }
         else if (field === 'upstream_count') { clearInput(upstreamMinInput); clearInput(upstreamMaxInput); }
+        else if (field === 'downstream_count') { clearInput(downstreamMinInput); clearInput(downstreamMaxInput); }
         else if (field === 'has_filter' && hasFilterSelect) hasFilterSelect.value = '';
       }
       applyTableFilter();
@@ -609,29 +785,23 @@ export const statisticsPage = {
         catalogDropdown.selectAll();
         refillSchemaOptions();
         schemaDropdown.selectAll();
+        objectTypeDropdown.selectAll();
+        certifiedDropdown.selectAll();
         applyTableFilter();
         return;
       }
-      const prev = tableFilter ? { ...tableFilter } : {};
-      delete prev.object_full_name;
-      delete prev.catalog;
-      delete prev.schema;
+      // Reflect the chart selection in the matching dropdown, then let
+      // syncTableFilterFromSelects rebuild tableFilter from every dropdown.
       if (source === 'certified') {
-        prev.certified = label === 'Certified';
-      }
-      if (source === 'type') {
-        prev.object_type = label;
-      }
-      if (source === 'catalog') {
-        prev.catalogs = [label];
-        delete prev.schemas;
+        certifiedDropdown.setSelected([label === 'Certified' ? 'Yes' : 'No']);
+      } else if (source === 'type') {
+        objectTypeDropdown.setSelected([label]);
+      } else if (source === 'catalog') {
         catalogDropdown.setSelected([label]);
-      }
-      tableFilter = Object.keys(prev).length ? prev : null;
-      if (source === 'catalog') {
         refillSchemaOptions();
         schemaDropdown.selectAll();
       }
+      syncTableFilterFromSelects();
       applyTableFilter();
     }
 
@@ -639,19 +809,23 @@ export const statisticsPage = {
       const metrics = readMetricFilters();
       const spec = tableFilter && (
         tableFilter.object_full_name
-        || tableFilter.object_type
+        || (tableFilter.object_types && tableFilter.object_types.length)
         || (tableFilter.catalogs && tableFilter.catalogs.length)
         || (tableFilter.schemas && tableFilter.schemas.length)
         || tableFilter.certified !== undefined
+        || tableFilter.deprecated !== undefined
+        || tableFilter.new !== undefined
       )
         ? tableFilter
         : {};
       const rows = allTableRows.filter((r) => {
         if (spec.object_full_name) return r.object_full_name === spec.object_full_name;
-        if (spec.object_type && (r.object_type ?? 'Unknown') !== spec.object_type) return false;
+        if (spec.object_types?.length && !spec.object_types.includes(r.object_type ?? 'Unknown')) return false;
         if (spec.certified !== undefined && Boolean(r.certified) !== spec.certified) return false;
+        if (spec.deprecated !== undefined && Boolean(r.deprecated) !== spec.deprecated) return false;
+        if (spec.new !== undefined && Boolean(r.new) !== spec.new) return false;
         if (spec.catalogs?.length && !spec.catalogs.includes(r.catalog)) return false;
-        if (spec.schemas?.length && !spec.schemas.includes(r.schema)) return false;
+        if (spec.schemas?.length && !schemaMatchesFilter(r.schema, spec.schemas)) return false;
         if (!rowMatchesMetricFilters(r, metrics)) return false;
         return true;
       });
@@ -666,6 +840,9 @@ export const statisticsPage = {
       const hasRows = sorted.length > 0;
       if (downloadCsvBtn) downloadCsvBtn.disabled = !hasRows;
       if (downloadXlsxBtn) downloadXlsxBtn.disabled = !hasRows;
+      // Charts reflect the same filtered rows as the table (the KPI totals
+      // above do not — they always describe the full dataset).
+      renderChartsFromRows(sorted);
       persistFilterState();
     }
 
@@ -698,18 +875,57 @@ export const statisticsPage = {
         schemaDropdown.setSelected(tableFilter.schemas);
       }
 
-      // Rebuild the catalog/schema portion of tableFilter from the
-      // dropdown state so the two agree, while preserving any other
-      // fields on tableFilter (object_full_name, object_type, certified).
+      refillObjectTypeOptions();
+
+      if (Array.isArray(saved.selectedObjectTypes)) {
+        objectTypeDropdown.setSelected(saved.selectedObjectTypes);
+      } else if (tableFilter?.object_types?.length) {
+        objectTypeDropdown.setSelected(tableFilter.object_types);
+      }
+
+      if (Array.isArray(saved.selectedCertified)) {
+        certifiedDropdown.setSelected(saved.selectedCertified);
+      } else if (tableFilter?.certified !== undefined) {
+        certifiedDropdown.setSelected([tableFilter.certified ? 'Yes' : 'No']);
+      }
+
+      if (Array.isArray(saved.selectedDeprecated)) {
+        deprecatedDropdown.setSelected(saved.selectedDeprecated);
+      } else if (tableFilter?.deprecated !== undefined) {
+        deprecatedDropdown.setSelected([tableFilter.deprecated ? 'Yes' : 'No']);
+      }
+
+      if (Array.isArray(saved.selectedNew)) {
+        newDropdown.setSelected(saved.selectedNew);
+      } else if (tableFilter?.new !== undefined) {
+        newDropdown.setSelected([tableFilter.new ? 'Yes' : 'No']);
+      }
+
+      // Rebuild the dropdown-driven portion of tableFilter from the dropdown
+      // state so the two agree, while preserving any other fields on
+      // tableFilter (object_full_name).
       const rest = tableFilter ? { ...tableFilter } : {};
       delete rest.catalog;
       delete rest.schema;
       delete rest.catalogs;
       delete rest.schemas;
+      delete rest.object_type;
+      delete rest.object_types;
+      delete rest.certified;
+      delete rest.deprecated;
+      delete rest.new;
       const cats = activeCatalogFilter();
       const schs = activeSchemaFilter();
+      const types = activeObjectTypeFilter();
+      const cert = activeCertifiedFilter();
+      const dep = activeDeprecatedFilter();
+      const nw = activeNewFilter();
       if (cats) rest.catalogs = cats;
       if (schs) rest.schemas = schs;
+      if (types) rest.object_types = types;
+      if (cert !== undefined) rest.certified = cert;
+      if (dep !== undefined) rest.deprecated = dep;
+      if (nw !== undefined) rest.new = nw;
       tableFilter = Object.keys(rest).length ? rest : null;
 
       const metrics = saved.metrics && typeof saved.metrics === 'object' ? saved.metrics : {};
@@ -728,6 +944,8 @@ export const statisticsPage = {
       setNum(sizeMaxInput, 'size_max');
       setNum(upstreamMinInput, 'upstream_count_min');
       setNum(upstreamMaxInput, 'upstream_count_max');
+      setNum(downstreamMinInput, 'downstream_count_min');
+      setNum(downstreamMaxInput, 'downstream_count_max');
       if (hasFilterSelect && metrics.has_filter != null) {
         hasFilterSelect.value = metrics.has_filter ? '1' : '0';
       }
@@ -982,6 +1200,8 @@ export const statisticsPage = {
 
     /** Redraw stat charts after theme change (assigned once data is loaded). */
     let rerenderCharts = () => {};
+    /** Recompute + redraw the charts from a row set (assigned once data is loaded). */
+    let renderChartsFromRows = () => {};
     const onThemeCharts = () => rerenderCharts();
     window.addEventListener(GLOBAL_LINEAGE_THEME_EVENT, onThemeCharts);
 
@@ -1009,11 +1229,35 @@ export const statisticsPage = {
       applyTableFilter();
     });
 
+    objectTypeDropdown.onChange(() => {
+      syncTableFilterFromSelects();
+      applyTableFilter();
+    });
+
+    certifiedDropdown.onChange(() => {
+      syncTableFilterFromSelects();
+      applyTableFilter();
+    });
+
+    deprecatedDropdown.onChange(() => {
+      syncTableFilterFromSelects();
+      applyTableFilter();
+    });
+
+    newDropdown.onChange(() => {
+      syncTableFilterFromSelects();
+      applyTableFilter();
+    });
+
     clearFilterBtn.addEventListener('click', () => {
       tableFilter = null;
       catalogDropdown.selectAll();
       refillSchemaOptions();
       schemaDropdown.selectAll();
+      objectTypeDropdown.selectAll();
+      certifiedDropdown.selectAll();
+      deprecatedDropdown.selectAll();
+      newDropdown.selectAll();
       clearMetricFilterInputs();
       clearStatsFilterState();
       applyTableFilter();
@@ -1048,96 +1292,56 @@ export const statisticsPage = {
       applyTableFilter();
     }
 
-    for (const input of [colsMinInput, colsMaxInput, cteMinInput, cteMaxInput, selectMinInput, selectMaxInput, sizeMinInput, sizeMaxInput, upstreamMinInput, upstreamMaxInput]) {
+    for (const input of [colsMinInput, colsMaxInput, cteMinInput, cteMaxInput, selectMinInput, selectMaxInput, sizeMinInput, sizeMaxInput, upstreamMinInput, upstreamMaxInput, downstreamMinInput, downstreamMaxInput]) {
       if (input) input.addEventListener('change', onMetricFilterChange);
     }
     if (hasFilterSelect) hasFilterSelect.addEventListener('change', onMetricFilterChange);
 
     try {
-      const [summary, byType, byPipeline, top, tableRows] = await Promise.all([
+      const [summary, tableRows] = await Promise.all([
         api.stats.summary(),
-        api.stats.byObjectType(),
-        api.stats.byPipeline(20),
-        api.stats.topDownstream(10),
         api.stats.listObjects({}),
       ]);
 
       allTableRows = tableRows;
       refillCatalogOptions();
       refillSchemaOptions();
+      refillObjectTypeOptions();
       // restoreFilterState populates tableFilter (including any
-      // object_full_name / object_type / certified) and syncs the
+      // object_full_name / object_types / certified) and syncs the
       // dropdowns. Don't call syncTableFilterFromSelects afterwards —
       // it would drop object_full_name.
       restoreFilterState();
+      // Summary KPIs describe the full dataset and are never filtered.
       summaryEl.innerHTML = renderSummary(summary);
 
-      const certBreakdown = () => {
-        let yes = 0;
-        let no = 0;
-        for (const r of allTableRows) {
-          if (r.certified) yes += 1;
-          else no += 1;
-        }
-        return [
-          { label: 'Certified', count: yes },
-          { label: 'Not certified', count: no },
-        ];
-      };
-
       const rType = chartCard('Objects by type');
-      rType.render('pie', byType, {
-        onSegmentClick: ({ label }) => setFilterFromChart('type', label),
-      });
-
+      // Only build the certified chart if the dataset has any certified
+      // objects at all (decided once, from the full dataset).
       const hasCertified = (summary.certified_objects || 0) > 0;
       const rCert = hasCertified ? chartCard('Certified vs not certified') : null;
-      if (rCert) {
-        rCert.render('pie', certBreakdown(), {
-          onSegmentClick: ({ label }) => setFilterFromChart('certified', label),
-        });
-      }
-
       const rCat = chartCard('Objects by catalog (top 20)');
-      rCat.render('horizontalBar', byPipeline, {
-        onSegmentClick: ({ label }) => setFilterFromChart('catalog', label),
-      });
-
       const rTop = chartCard('Top 10 by downstream count');
-      rTop.render(
-        'horizontalBar',
-        top.map((r) => ({
-          label: r.object_full_name,
-          count: r.downstream_count,
-        })),
-        {
-          onSegmentClick: ({ label }) => setFilterFromChart('object', label),
-        }
-      );
 
-      rerenderCharts = () => {
-        rType.render('pie', byType, {
+      renderChartsFromRows = (rows) => {
+        rType.render('pie', chartByType(rows), {
           onSegmentClick: ({ label }) => setFilterFromChart('type', label),
         });
         if (rCert) {
-          rCert.render('pie', certBreakdown(), {
+          rCert.render('pie', chartCertBreakdown(rows), {
             onSegmentClick: ({ label }) => setFilterFromChart('certified', label),
           });
         }
-        rCat.render('horizontalBar', byPipeline, {
+        rCat.render('horizontalBar', chartByCatalog(rows, 20), {
           onSegmentClick: ({ label }) => setFilterFromChart('catalog', label),
         });
-        rTop.render(
-          'horizontalBar',
-          top.map((r) => ({
-            label: r.object_full_name,
-            count: r.downstream_count,
-          })),
-          {
-            onSegmentClick: ({ label }) => setFilterFromChart('object', label),
-          }
-        );
+        rTop.render('horizontalBar', chartTopDownstream(rows, 10), {
+          onSegmentClick: ({ label }) => setFilterFromChart('object', label),
+        });
       };
+
+      // Theme change: redraw using whatever rows are currently filtered in.
+      rerenderCharts = () => renderChartsFromRows(currentTableRows);
 
       applyTableFilter();
       requestAnimationFrame(syncHeaderTooltips);
@@ -1158,6 +1362,10 @@ export const statisticsPage = {
       teardownHeaderTooltips();
       catalogDropdown.destroy();
       schemaDropdown.destroy();
+      objectTypeDropdown.destroy();
+      certifiedDropdown.destroy();
+      deprecatedDropdown.destroy();
+      newDropdown.destroy();
       tableBodyEl.removeEventListener('click', onTableBodyClick);
       listModal.removeEventListener('click', onListModalClick);
       document.removeEventListener('keydown', onDocKeydown);
@@ -1192,6 +1400,8 @@ const STATS_EXPORT_COLUMNS = [
   { header: 'Object', get: (r) => r.object_full_name ?? '' },
   { header: 'Type', get: (r) => r.object_type ?? 'Unknown' },
   { header: 'Certified', get: (r) => (r.certified ? 'Yes' : 'No') },
+  { header: 'Deprecated', get: (r) => (r.deprecated ? 'Yes' : 'No') },
+  { header: 'New', get: (r) => (r.new ? 'Yes' : 'No') },
   { header: 'Catalog', get: (r) => r.catalog ?? '' },
   { header: 'Schema', get: (r) => r.schema ?? '' },
   { header: 'Upstream', get: (r) => Number(r.upstream_count) || 0 },
@@ -1262,6 +1472,53 @@ function downloadStatsXlsx(rows) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Objects');
   XLSX.writeFile(wb, statsExportFilename('xlsx'));
+}
+
+// ---- Chart datasets, derived from a (filtered) row set ----------------
+// Kept in sync with the store's stats aggregations so filtered charts use
+// the same grouping semantics as the unfiltered dataset once did.
+
+function chartByType(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    const t = r.object_type ?? 'Unknown';
+    m.set(t, (m.get(t) || 0) + 1);
+  }
+  return [...m.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function chartCertBreakdown(rows) {
+  let yes = 0;
+  let no = 0;
+  for (const r of rows) {
+    if (r.certified) yes += 1;
+    else no += 1;
+  }
+  return [
+    { label: 'Certified', count: yes },
+    { label: 'Not certified', count: no },
+  ];
+}
+
+function chartByCatalog(rows, limit) {
+  const m = new Map();
+  for (const r of rows) {
+    const cat = r.catalog || '—';
+    m.set(cat, (m.get(cat) || 0) + 1);
+  }
+  return [...m.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+function chartTopDownstream(rows, n) {
+  return rows
+    .map((r) => ({ label: r.object_full_name, count: Number(r.downstream_count) || 0 }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, n);
 }
 
 function renderSummary(s) {

@@ -580,9 +580,15 @@ function renderPopover(node, exploreUrlFor) {
   const url = exploreUrlFor(name);
   const externalLink = node.data && node.data.link ? String(node.data.link) : '';
   const certified = !!(node.data && node.data.certified);
+  const deprecated = !!(node.data && node.data.deprecated);
+  const isNew = !!(node.data && node.data.new);
   const rowDefs = [['Type', escapeHtml(node.type || '—')]];
   // Only surface certification when the object is actually certified.
   if (certified) rowDefs.push(['Certified', certifiedBadge(true)]);
+  // Only surface deprecation when the object is actually deprecated.
+  if (deprecated) rowDefs.push(['Deprecated', deprecatedBadge(true)]);
+  // Only surface the "new" flag when the object is actually new.
+  if (isNew) rowDefs.push(['New', newBadge(true)]);
   rowDefs.push(...objectMetricFieldRows(node.data));
   const rows = rowDefs
     .map(
@@ -621,6 +627,18 @@ function certifiedBadge(certified) {
     : '<span class="cert-badge cert-badge--no" title="Not certified">Not certified</span>';
 }
 
+function deprecatedBadge(deprecated) {
+  return deprecated
+    ? '<span class="cert-badge cert-badge--deprecated" title="This object is deprecated">⚠ Deprecated</span>'
+    : '';
+}
+
+function newBadge(isNew) {
+  return isNew
+    ? '<span class="cert-badge cert-badge--new" title="This object is new">✦ New</span>'
+    : '';
+}
+
 /** @param {Record<string, unknown>|null|undefined} data */
 function objectMetricFieldRows(data) {
   if (!data) return [];
@@ -651,11 +669,17 @@ function renderNodeDetails(node, exploreUrlFor) {
   const url = exploreUrlFor(name);
   const externalLink = node.data && node.data.link ? String(node.data.link) : '';
   const certified = !!(node.data && node.data.certified);
+  const deprecated = !!(node.data && node.data.deprecated);
+  const isNew = !!(node.data && node.data.new);
   const fields = [
     ['Type', escapeHtml(node.type || '—')],
   ];
   // Only surface certification when the object is actually certified.
   if (certified) fields.push(['Certified', certifiedBadge(true)]);
+  // Only surface deprecation when the object is actually deprecated.
+  if (deprecated) fields.push(['Deprecated', deprecatedBadge(true)]);
+  // Only surface the "new" flag when the object is actually new.
+  if (isNew) fields.push(['New', newBadge(true)]);
   fields.push(...objectMetricFieldRows(node.data));
   const rows = fields
     .map(

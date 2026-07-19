@@ -51,8 +51,8 @@
  *           Switch to a named layout and re-run it on the current graph.
  *
  * @property {(query: string) => void} highlight
- *           Highlight nodes whose label contains the query (case-insensitive).
- *           Empty string clears the highlight.
+ *           Highlight the node whose label exactly equals the query
+ *           (case-insensitive). Empty string clears the highlight.
  *
  * @property {() => void} fit
  *           Reset zoom/pan to fit the whole graph.

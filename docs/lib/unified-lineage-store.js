@@ -34,7 +34,7 @@ export async function listInputLineageFiles() {
   }
 }
 
-/** @typedef {{ object_full_name: string, object_type?: string|null, link?: string|null, upstream_objects?: string[], certified?: boolean, number_of_columns?: number|null, has_filter?: boolean|null, number_of_CTE?: number|null, number_of_select?: number|null, size?: number|null }} UnifiedRow */
+/** @typedef {{ object_full_name: string, object_type?: string|null, link?: string|null, upstream_objects?: string[], certified?: boolean, deprecated?: boolean, new?: boolean, number_of_columns?: number|null, has_filter?: boolean|null, number_of_CTE?: number|null, number_of_select?: number|null, size?: number|null }} UnifiedRow */
 
 /** @typedef {{ number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }} ObjectMetrics */
 
@@ -166,6 +166,10 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
   const objectTypes = new Map();
   /** @type {Set<string>} Objects carrying `"certified": true` in the source JSON. */
   const certifiedNames = new Set();
+  /** @type {Set<string>} Objects carrying `"deprecated": true` in the source JSON. */
+  const deprecatedNames = new Set();
+  /** @type {Set<string>} Objects carrying `"new": true` in the source JSON. */
+  const newNames = new Set();
   /** @type {Map<string, ObjectMetrics>} */
   const objectMetrics = new Map();
   /** @type {Map<string, string>} External URLs from the source JSON `link` field. */
@@ -187,6 +191,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
       objectLinks.set(target, String(row.link).trim());
     }
     if (row.certified === true) certifiedNames.add(target);
+    if (row.deprecated === true) deprecatedNames.add(target);
+    if (row.new === true) newNames.add(target);
     const ups = Array.isArray(row.upstream_objects) ? row.upstream_objects : [];
     for (const source of ups) {
       if (!source) continue;
@@ -211,6 +217,10 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
   // of truth — we include them but don't traverse past them).
   /** Whether `id` is certified (carried `"certified": true` in the source JSON). */
   const isCertified = (id) => certifiedNames.has(id);
+  /** Whether `id` is deprecated (carried `"deprecated": true` in the source JSON). */
+  const isDeprecated = (id) => deprecatedNames.has(id);
+  /** Whether `id` is new (carried `"new": true` in the source JSON). */
+  const isNew = (id) => newNames.has(id);
 
   const isStopBoundary = (id) => {
     const t = objectTypes.get(id);
@@ -272,7 +282,7 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
       id,
       label: id,
       type: objectTypes.get(id) ?? null,
-      data: { certified: isCertified(id), link: linkFor(id), ...metricsFor(id) },
+      data: { certified: isCertified(id), deprecated: isDeprecated(id), new: isNew(id), link: linkFor(id), ...metricsFor(id) },
     }));
   }
 
@@ -390,12 +400,18 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
     }
     let certifiedCount = 0;
     for (const n of allNames) if (certifiedNames.has(n)) certifiedCount += 1;
+    let deprecatedCount = 0;
+    for (const n of allNames) if (deprecatedNames.has(n)) deprecatedCount += 1;
+    let newCount = 0;
+    for (const n of allNames) if (newNames.has(n)) newCount += 1;
     return {
       total_objects: allNames.size,
       total_edges: allEdges.length,
       distinct_types: typeLabels.size,
       distinct_pipelines: catalogs.size,
       certified_objects: certifiedCount,
+      deprecated_objects: deprecatedCount,
+      new_objects: newCount,
     };
   }
 
@@ -438,8 +454,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
 
   /**
    * Rows for the statistics table. Filters are combined with AND when multiple are set.
-   * @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null, has_filter?: boolean|null, number_of_columns_min?: number|null, number_of_columns_max?: number|null, number_of_CTE_min?: number|null, number_of_CTE_max?: number|null, number_of_select_min?: number|null, number_of_select_max?: number|null, size_min?: number|null, size_max?: number|null }} filter
-   * @returns {{ object_full_name: string, object_type: string|null, link: string|null, certified: boolean, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], longest_upstream_depth: number, longest_downstream_depth: number, longest_upstream_path: string[], longest_downstream_path: string[], number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }[]}
+   * @param {{ object_type?: string|null, catalog?: string|null, schema?: string|null, object_full_name?: string|null, has_filter?: boolean|null, deprecated?: boolean|null, new?: boolean|null, number_of_columns_min?: number|null, number_of_columns_max?: number|null, number_of_CTE_min?: number|null, number_of_CTE_max?: number|null, number_of_select_min?: number|null, number_of_select_max?: number|null, size_min?: number|null, size_max?: number|null }} filter
+   * @returns {{ object_full_name: string, object_type: string|null, link: string|null, certified: boolean, deprecated: boolean, new: boolean, catalog: string, schema: string, downstream_count: number, downstream_objects: string[], upstream_count: number, upstream_objects: string[], longest_upstream_depth: number, longest_downstream_depth: number, longest_upstream_path: string[], longest_downstream_path: string[], number_of_columns: number|null, has_filter: boolean|null, number_of_CTE: number|null, number_of_select: number|null, size: number|null }[]}
    */
   function listObjectsForStats(filter = {}) {
     const typeEq = filter.object_type != null && filter.object_type !== '' ? String(filter.object_type) : null;
@@ -449,6 +465,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
       ? String(filter.object_full_name)
       : null;
     const hasFilterEq = filter.has_filter != null && filter.has_filter !== '' ? Boolean(filter.has_filter) : null;
+    const deprecatedEq = filter.deprecated != null && filter.deprecated !== '' ? Boolean(filter.deprecated) : null;
+    const newEq = filter.new != null && filter.new !== '' ? Boolean(filter.new) : null;
     const numBounds = [
       ['number_of_columns', filter.number_of_columns_min, filter.number_of_columns_max],
       ['number_of_CTE', filter.number_of_CTE_min, filter.number_of_CTE_max],
@@ -479,6 +497,12 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
       if (hasFilterEq != null) {
         names = names.filter((n) => metricsFor(n).has_filter === hasFilterEq);
       }
+      if (deprecatedEq != null) {
+        names = names.filter((n) => isDeprecated(n) === deprecatedEq);
+      }
+      if (newEq != null) {
+        names = names.filter((n) => isNew(n) === newEq);
+      }
       for (const { key, min, max } of numBounds) {
         if (min == null && max == null) continue;
         names = names.filter((n) => {
@@ -501,6 +525,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
         object_type: objectTypes.get(object_full_name) ?? null,
         link: linkFor(object_full_name),
         certified: isCertified(object_full_name),
+        deprecated: isDeprecated(object_full_name),
+        new: isNew(object_full_name),
         catalog,
         schema,
         downstream_count: downstreamCountMap.get(object_full_name) || 0,
@@ -530,6 +556,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
       object_type: objectTypes.get(fullName) ?? null,
       link: linkFor(fullName),
       certified: isCertified(fullName),
+      deprecated: isDeprecated(fullName),
+      new: isNew(fullName),
       upstream_objects: [...(upstream.get(fullName) || [])].sort(),
       downstream_objects: [...(downstream.get(fullName) || [])].sort(),
       ...metricsFor(fullName),
@@ -552,6 +580,8 @@ function buildStore(rows, catalogExploreBaseUrl, catalogMapping = {}) {
     listObjectsForStats,
     objectDetail,
     isCertified,
+    isDeprecated,
+    isNew,
     exploreUrlFor,
     catalogExploreBaseUrl,
     catalogMapping,

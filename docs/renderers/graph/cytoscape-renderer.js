@@ -243,7 +243,7 @@ export function createCytoscapeRenderer() {
         cy.elements().removeClass('highlighted dimmed');
         if (!q) return;
         const matches = cy.nodes().filter((n) =>
-          String(n.data('label') || '').toLowerCase().includes(q)
+          String(n.data('label') || '').toLowerCase() === q
         );
         if (matches.length === 0) return;
         const keep = matches.union(matches.neighborhood());

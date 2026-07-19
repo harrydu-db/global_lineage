@@ -575,6 +575,15 @@ html, body {
 }
 .card ol.simple-list .count { color: var(--accent-2); font-variant-numeric: tabular-nums; }
 
+/* Statistics page: filter panel above the charts */
+.stats-filters-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* Statistics page: object table */
 .stats-table-section {
   margin-top: 28px;
@@ -807,6 +816,11 @@ html, body {
   display: flex;
   align-items: flex-end;
   gap: 8px;
+}
+
+/* Download buttons sit to the right of the "Objects" heading. */
+.stats-table-head > .stats-table-actions {
+  margin-left: auto;
 }
 
 .stats-table-download {
@@ -1227,4 +1241,14 @@ body.stats-col-resizing * {
   color: var(--text-dim);
   border-color: var(--border);
   background: transparent;
+}
+.cert-badge--deprecated {
+  color: var(--error);
+  border-color: var(--error);
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+}
+.cert-badge--new {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
